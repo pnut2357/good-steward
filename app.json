@@ -9,7 +9,8 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.anonymous.good-steward"
     },
     "android": {
       "adaptiveIcon": {
@@ -40,24 +41,9 @@
         }
       ],
       "react-native-health-connect",
-      "expo-build-properties"
+      "expo-build-properties",
+      "expo-sqlite"
     ],
-    // "plugins": [
-    //   [
-    //     "expo-build-properties",
-    //     {
-    //       "android": {
-    //         "compileSdkVersion": 34,
-    //         "targetSdkVersion": 34,
-    //         "minSdkVersion": 26
-    //       },
-    //       "ios": {
-    //         "deploymentTarget": "13.4"
-    //       }
-    //     }
-    //   ],
-    //   "expo-health-connect"
-    // ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
