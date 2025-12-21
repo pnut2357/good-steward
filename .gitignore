@@ -183,6 +183,7 @@ __pycache__
 dist
 .DS_Store
 .coverage
+.vscode/*
 .vscode
 .envs-looper
 coverage.json
