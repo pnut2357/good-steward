@@ -10,7 +10,8 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.good-steward"
+      "bundleIdentifier": "com.anonymous.good-steward",
+      "deploymentTarget": "15.5"
     },
     "android": {
       "adaptiveIcon": {
@@ -20,7 +21,8 @@
         "monochromeImage": "./assets/images/emoji3.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.anonymous.goodsteward"
     },
     "web": {
       "output": "static",
@@ -41,7 +43,14 @@
         }
       ],
       "react-native-health-connect",
-      "expo-build-properties",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "15.5"
+          }
+        }
+      ],
       "expo-sqlite"
     ],
     "experiments": {

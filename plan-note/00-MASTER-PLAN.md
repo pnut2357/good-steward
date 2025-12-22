@@ -259,41 +259,67 @@ Currently works for **packaged products** (barcode/label scanning). Users also n
 - Fresh fruits/vegetables
 - Prepared foods without packaging
 
-### Recommended Approach: On-Device TensorFlow Lite
-**Cost: FREE | Latency: ~50-200ms | Offline: YES**
+### Solution Options Compared
+| Option | Cost | Speed | Offline | Accuracy | Complexity |
+|--------|------|-------|---------|----------|------------|
+| **TFLite On-Device** ⭐ | FREE forever | 50-200ms | ✅ Yes | Good (101 foods) | Medium |
+| Cloud APIs (Clarifai) | Free tier limited | 500-2000ms | ❌ No | High | Low |
+| ML Kit Labels | FREE | 100-300ms | ✅ Yes | Poor (generic) | Low |
+| Manual Selection | FREE | User-dependent | ✅ Yes | User-dependent | Low |
+
+⚠️ **Note**: Cloud APIs are NOT downloaded - you send images to their servers.
+
+### Recommended: On-Device TensorFlow Lite
+**Cost: FREE forever | Latency: ~50-200ms | Offline: YES**
 
 ```
 📸 Photo of food
        ↓
-🧠 TFLite Food-101 Model (on-device)
+🧠 TFLite Food-101 Model (bundled in app, ~5MB)
        ↓
 🍕 "Pizza" (92% confidence)
        ↓
-📊 Lookup nutrition → ~266 kcal/100g
+📊 Local nutrition database → ~266 kcal/100g
 ```
 
+**Why TFLite?**
+- ✅ 100% FREE - no API costs, ever
+- ✅ Works offline - no internet needed
+- ✅ Fast - 50-200ms on-device inference
+- ✅ Private - images never leave device
+- ✅ Food-specific - trained on 101 food categories
+
+### Implementation Timeline
+| Task | Time |
+|------|------|
+| Install dependencies & download model | 1 day |
+| Create FoodRecognitionService | 1 day |
+| Build nutrition database (101 foods) | 0.5 day |
+| Add "Identify" mode to scanner | 1 day |
+| Testing & refinement | 0.5-1 day |
+| **Total** | **4-5 days** |
+
 ### Key Dependencies
-```json
-{
-  "react-native-fast-tflite": "^1.5.0",
-  "react-native-vision-camera": "^4.0.0"
-}
+```bash
+npm install react-native-fast-tflite react-native-worklets-core
+npx expo run:ios  # Required: dev build (not Expo Go)
 ```
+
+### Files to Create
+| File | Purpose |
+|------|---------|
+| `assets/models/food_v1.tflite` | TFLite model (~5MB) |
+| `services/FoodRecognitionService.ts` | Model loading & inference |
+| `data/food101Nutrition.ts` | Nutrition for 101 foods |
+| `components/FoodIdentifyOverlay.tsx` | "Identify" mode UI |
 
 ### Reference Projects
 | Project | Approach | Link |
 |---------|----------|------|
 | **Food101** | React Native + CoreML | [GantMan/Food101](https://github.com/GantMan/Food101) |
-| **FoodCalorieEstimation** | Python + Azure | [virajmane/FoodCalorieEstimation](https://github.com/virajmane/FoodCalorieEstimation) |
 | **react-native-fast-tflite** | TFLite for RN | [mrousavy/react-native-fast-tflite](https://github.com/mrousavy/react-native-fast-tflite) |
 
-### Files to Create
-- `services/FoodRecognitionService.ts` - TFLite model inference
-- `data/food101Nutrition.ts` - Pre-computed nutrition for 101 foods
-- `components/FoodIdentifyOverlay.tsx` - Real-time recognition UI
-- `assets/models/food_v1.tflite` - TensorFlow Lite model (~5MB)
-
-**See**: [24-real-food-recognition.md](./24-real-food-recognition.md) for full details.
+**See**: [24-real-food-recognition.md](./24-real-food-recognition.md) for full implementation details.
 
 ---
 

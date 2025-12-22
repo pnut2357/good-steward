@@ -1,287 +1,216 @@
-# Phase 4: Real Food Recognition (Planned)
+# Phase 4: Real Food Recognition
 
-> **Created**: December 21, 2024  
-> **Status**: 📋 Planned (v2.0)  
+> **Last Updated**: December 21, 2024  
+> **Status**: ✅ IMPLEMENTED  
 > **Priority**: Medium  
-> **Complexity**: High
+> **Complexity**: Medium-High
 
 ---
 
-## Overview
+## 📋 Table of Contents
 
-### The Problem
-Currently, Good Steward works great for **packaged products** (barcode → database lookup). But users also want to analyze **real/unpackaged food**:
+1. [Problem Statement](#1-problem-statement)
+2. [Solution Options Comparison](#2-solution-options-comparison)
+3. [Recommended Approach](#3-recommended-approach)
+4. [Implementation Plan](#4-implementation-plan)
+5. [Food-101 Model Details](#5-food-101-model-details)
+6. [Nutrition Database](#6-nutrition-database)
+7. [UI Design](#7-ui-design)
+8. [Files to Create](#8-files-to-create)
+9. [References](#9-references)
 
-| Works Now ✅ | Needs Work 🔮 |
-|--------------|---------------|
-| Packaged snacks with barcode | Homemade meals |
-| Branded products | Restaurant dishes |
-| Nutrition labels | Fresh fruits/vegetables |
-| | Prepared foods without packaging |
+---
+
+## 1. Problem Statement
+
+### What Works Now ✅
+- **Barcode scanning** → OpenFoodFacts lookup
+- **Photo of packaged product** → OCR → Search database
+- **Nutrition label scanning** → OCR → Parse values
+
+### What's Missing 🔮
+| Scenario | Current Behavior | Desired Behavior |
+|----------|------------------|------------------|
+| Photo of pizza | "Product not found" | "Pizza - ~266 kcal/100g" |
+| Fresh apple | No barcode to scan | "Apple - ~52 kcal/100g" |
+| Restaurant meal | Can't identify | "Hamburger - ~295 kcal/100g" |
+| Homemade salad | No label | "Salad - ~20 kcal/100g" |
 
 ### The Goal
-Take a photo of any food → Identify what it is → Estimate nutrition
-
 ```
-📸 Photo of Plate
+📸 Photo of ANY food
        ↓
-🤖 Food Recognition AI
+🤖 AI identifies: "Pizza"
        ↓
-🍕 "Pizza Margherita"
+📊 Shows: ~266 kcal, 11g protein, 33g carbs
        ↓
-📊 Estimated: 250 kcal, 12g fat, 8g protein...
+📝 User logs consumption
 ```
 
 ---
 
-## Research: Existing Solutions
+## 2. Solution Options Comparison
 
-### Reference Projects
+### Option A: On-Device TFLite ⭐ RECOMMENDED
+| Aspect | Details |
+|--------|---------|
+| **How it works** | Download model once (~5MB), runs on phone |
+| **Cost** | FREE forever |
+| **Speed** | 50-200ms |
+| **Offline** | ✅ Yes |
+| **Accuracy** | Good (101 food categories) |
+| **Requirements** | Dev build (`npx expo run:ios`) |
 
-#### 1. [FoodCalorieEstimation](https://github.com/virajmane/FoodCalorieEstimation)
-- **Tech**: Python + Azure deployment
-- **Approach**: Image → AI Vision → Calorie estimation
-- **Demo**: https://foood.azurewebsites.net
-- **Pros**: Simple, working demo
-- **Cons**: Server-based, not mobile-native
+```
+📱 App contains TFLite model
+       ↓
+📸 Photo taken
+       ↓
+🧠 On-device inference (no internet)
+       ↓
+🍕 "Pizza" (confidence: 92%)
+```
 
-#### 2. [Food101](https://github.com/GantMan/Food101)
-- **Tech**: React Native + CoreML
-- **Approach**: On-device ML using Food-101 dataset
-- **Model**: Trained on 101 food categories
-- **Pros**: On-device, fast, free
-- **Cons**: Limited to 101 categories, iOS-focused (CoreML)
+### Option B: Cloud APIs
+| Provider | Free Tier | Food-Specific | Offline |
+|----------|-----------|---------------|---------|
+| **Clarifai** | 1,000/month | ✅ Yes | ❌ No |
+| **Google Vision** | 1,000/month | ❌ Generic | ❌ No |
+| **LogMeal** | 50/day | ✅ Yes + nutrition | ❌ No |
 
-#### 3. [react-native-fast-tflite](https://github.com/mrousavy/react-native-fast-tflite)
-- **Tech**: TensorFlow Lite for React Native
-- **Approach**: Run any TFLite model on-device
-- **Features**: GPU acceleration, frame processor support
-- **Pros**: Fast, cross-platform, any model
-- **Cons**: Requires development build, model selection
+⚠️ **Cloud APIs are NOT downloaded** - you send images to their servers.
 
-### Food Recognition Datasets
-| Dataset | Categories | Images | Use Case |
-|---------|------------|--------|----------|
-| **Food-101** | 101 | 101,000 | General food recognition |
-| **Food-2K** | 2,000 | 1M+ | More categories |
-| **Nutrition5K** | 5,000 | Real portions with measured nutrition |
+### Option C: ML Kit Image Labeling
+| Aspect | Details |
+|--------|---------|
+| **How it works** | Google's on-device ML |
+| **Cost** | FREE |
+| **Offline** | ✅ Yes |
+| **Food-specific** | ❌ No (generic labels) |
+
+❌ **Problem**: Returns "food" instead of "pizza"
+
+### Option D: Manual Selection (Simplest)
+| Aspect | Details |
+|--------|---------|
+| **How it works** | User searches/selects food type |
+| **Cost** | FREE |
+| **Offline** | ✅ Yes |
+| **Accuracy** | User-dependent |
+
+```
+📸 Take photo (reference only)
+       ↓
+🔍 User searches: "pizza"
+       ↓
+📋 Select from list
+       ↓
+📊 Show nutrition
+```
 
 ---
 
-## Approach Options
+## 3. Recommended Approach
 
-### Option A: On-Device TensorFlow Lite (Recommended)
-**Cost: FREE | Latency: ~50-200ms | Offline: YES**
+### Primary: TFLite Food-101 (On-Device)
+**Why this approach?**
+- ✅ **100% FREE** - no API costs, ever
+- ✅ **Works offline** - no internet needed
+- ✅ **Fast** - 50-200ms inference
+- ✅ **Private** - images never leave device
+- ✅ **Food-specific** - trained on 101 food categories
 
+### Fallback: Manual Selection
+If AI confidence is low (<60%), let user manually select:
+```
+🤖 AI: "Not sure... maybe pizza? (45%)"
+       ↓
+👤 User: Selects "Pizza" from list
+       ↓
+📊 Show nutrition
+```
+
+### Architecture
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  APPROACH A: On-Device TFLite                               │
+│  REAL FOOD RECOGNITION FLOW                                 │
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
-│  📸 Camera Frame                                            │
+│  📸 User takes photo of food                                │
 │         ↓                                                   │
-│  🧠 TFLite Food-101 Model (on-device)                      │
-│         ↓                                                   │
-│  🏷️ "pizza" (confidence: 0.92)                             │
-│         ↓                                                   │
-│  📊 Lookup nutrition in local database                      │
-│         ↓                                                   │
-│  📱 Display: ~250 kcal per serving                         │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
-
-**Dependencies:**
-```json
-{
-  "react-native-fast-tflite": "^1.x",
-  "react-native-vision-camera": "^4.x"
-}
-```
-
-**Pros:**
-- ✅ Completely free
-- ✅ Works offline
-- ✅ Fast (50-200ms)
-- ✅ No API costs ever
-- ✅ Privacy (images never leave device)
-
-**Cons:**
-- ❌ Requires development build
-- ❌ Limited to trained categories (101-2000)
-- ❌ Model file adds ~20-50MB to app size
-- ❌ Less accurate than cloud AI
-
----
-
-### Option B: Google ML Kit Image Labeling
-**Cost: FREE | Latency: ~100-300ms | Offline: Partial**
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  APPROACH B: ML Kit Image Labeling                          │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  📸 Photo                                                   │
-│         ↓                                                   │
-│  🏷️ ML Kit: ["food", "pizza", "cheese", "tomato"]         │
-│         ↓                                                   │
-│  🔍 Search USDA/OFF for "pizza"                            │
-│         ↓                                                   │
-│  📊 Average nutrition for "pizza"                          │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
-
-**Dependencies:**
-```json
-{
-  "@react-native-ml-kit/image-labeling": "^1.x"
-}
-```
-
-**Pros:**
-- ✅ Free (on-device)
-- ✅ Easy integration
-- ✅ Already using ML Kit for OCR
-
-**Cons:**
-- ❌ Generic labels, not food-specific
-- ❌ May return "food" instead of "pizza"
-- ❌ Requires development build
-
----
-
-### Option C: Cloud Vision API (Free Tier)
-**Cost: FREE tier | Latency: ~500-2000ms | Offline: NO**
-
-| Provider | Free Tier | Food-Specific |
-|----------|-----------|---------------|
-| **Google Cloud Vision** | 1,000/month | Generic labels |
-| **Clarifai Food Model** | 5,000/month | ✅ Food-specific |
-| **LogMeal API** | 50/day | ✅ Food + Nutrition |
-| **Foodvisor API** | Limited | ✅ Food + Portions |
-
-**Pros:**
-- ✅ Most accurate
-- ✅ Works in Expo Go
-- ✅ No model bundling
-
-**Cons:**
-- ❌ Requires internet
-- ❌ Free tiers have limits
-- ❌ Latency (network round-trip)
-- ❌ Privacy concerns
-
----
-
-### Option D: Hybrid Approach (Recommended for v2)
-**Best of both worlds**
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  APPROACH D: Hybrid (On-Device + Cloud Fallback)            │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  📸 Photo                                                   │
+│  🧠 TFLite Model (on-device)                               │
 │         ↓                                                   │
 │  ┌─────────────────────────────────────────────────────┐   │
-│  │ TRY: On-Device TFLite (Food-101)                    │   │
-│  │      Fast, free, offline                            │   │
+│  │ Confidence >= 70%?                                  │   │
+│  │   YES → Show result: "🍕 Pizza (92%)"              │   │
+│  │   NO  → Show options: "Did you mean: Pizza? Bread?"│   │
 │  └─────────────────────────────────────────────────────┘   │
-│         │                                                   │
-│    [Confidence < 70%?]                                     │
-│         │                                                   │
-│         ▼                                                   │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │ FALLBACK: Cloud API (Clarifai/LogMeal)              │   │
-│  │           More accurate, uses free tier             │   │
-│  └─────────────────────────────────────────────────────┘   │
-│         │                                                   │
-│         ▼                                                   │
-│  📊 Nutrition Estimate                                      │
+│         ↓                                                   │
+│  📊 Lookup nutrition from local database                    │
+│         ↓                                                   │
+│  📱 Display: 266 kcal, 11g protein, 33g carbs              │
+│         ↓                                                   │
+│  📝 User can log consumption                                │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Recommended Implementation Plan
+## 4. Implementation Plan
 
-### Phase 4A: Food Recognition MVP
-**Timeline**: 2-3 days | **Complexity**: Medium
+### Phase 4A: Core Food Recognition (3-4 days)
 
-1. **Install react-native-fast-tflite**
-   ```bash
-   npm install react-native-fast-tflite
-   npx expo run:ios  # Requires dev build
-   ```
+| Step | Task | Time | Status |
+|------|------|------|--------|
+| 4A.1 | Install dependencies | 0.5 day | 📋 |
+| 4A.2 | Download & bundle TFLite model | 0.5 day | 📋 |
+| 4A.3 | Create `FoodRecognitionService.ts` | 1 day | 📋 |
+| 4A.4 | Create `food101Nutrition.ts` database | 0.5 day | 📋 |
+| 4A.5 | Add "Identify" mode to scanner | 1 day | 📋 |
+| 4A.6 | Testing & refinement | 0.5 day | 📋 |
 
-2. **Download Food-101 TFLite Model**
-   - Source: [TensorFlow Hub](https://tfhub.dev/google/lite-model/aiy/vision/classifier/food_V1/1)
-   - Size: ~5MB (quantized)
-   - Categories: 101 food types
+### Dependencies to Install
+```bash
+# TensorFlow Lite for React Native
+npm install react-native-fast-tflite
 
-3. **Create FoodRecognitionService**
-   ```typescript
-   // services/FoodRecognitionService.ts
-   import { TensorFlowLite } from 'react-native-fast-tflite';
-   
-   class FoodRecognitionService {
-     private model: TensorFlowLite | null = null;
-     
-     async loadModel() {
-       this.model = await TensorFlowLite.loadModel(
-         require('../assets/models/food_v1.tflite')
-       );
-     }
-     
-     async recognizeFood(imageUri: string): Promise<{
-       food: string;
-       confidence: number;
-     }> {
-       // Run inference
-     }
-   }
-   ```
+# Required peer dependency
+npm install react-native-worklets-core
 
-4. **Create Nutrition Database for 101 Foods**
-   ```typescript
-   // data/food101Nutrition.ts
-   export const FOOD_NUTRITION: Record<string, NutritionData> = {
-     'pizza': { calories_100g: 266, protein_100g: 11, ... },
-     'hamburger': { calories_100g: 295, protein_100g: 17, ... },
-     'sushi': { calories_100g: 150, protein_100g: 6, ... },
-     // ... 101 foods
-   };
-   ```
-
-5. **Add "Identify Food" Mode to Scanner**
-   - New mode toggle: Barcode | Photo | Identify
-   - Real-time frame processing with TFLite
-   - Show food name + nutrition estimate
-
-### Phase 4B: Portion Estimation (Advanced)
-**Timeline**: 3-5 days | **Complexity**: High
-
-Use depth estimation or reference objects to estimate portion size:
-
+# Create development build (required!)
+npx expo run:ios
+# or
+npx expo run:android
 ```
-📸 Photo with reference (coin, hand, plate)
-         ↓
-🤖 Detect food + estimate area
-         ↓
-📏 Calculate approximate grams
-         ↓
-📊 Nutrition per estimated portion
-```
+
+### Phase 4B: Enhancements (Optional, 2-3 days)
+| Step | Task | Time |
+|------|------|------|
+| 4B.1 | Add manual food search fallback | 0.5 day |
+| 4B.2 | Add common portion presets | 0.5 day |
+| 4B.3 | Add "Not this food" correction flow | 0.5 day |
+| 4B.4 | Improve UI/UX | 1 day |
 
 ---
 
-## Food-101 Categories
+## 5. Food-101 Model Details
 
-The Food-101 dataset includes these 101 categories:
+### Model Source
+- **TensorFlow Hub**: [Food V1](https://tfhub.dev/google/lite-model/aiy/vision/classifier/food_V1/1)
+- **Format**: TensorFlow Lite (.tflite)
+- **Size**: ~5MB (quantized)
+- **Input**: 224x224 RGB image
+- **Output**: 101 class probabilities
 
+### Download Instructions
+```bash
+# Download from TensorFlow Hub
+curl -L "https://tfhub.dev/google/lite-model/aiy/vision/classifier/food_V1/1?lite-format=tflite" \
+  -o assets/models/food_v1.tflite
+```
+
+### The 101 Food Categories
 ```
 apple_pie, baby_back_ribs, baklava, beef_carpaccio, beef_tartare,
 beet_salad, beignets, bibimbap, bread_pudding, breakfast_burrito,
@@ -307,30 +236,30 @@ waffles
 
 ---
 
-## Nutrition Data Sources
+## 6. Nutrition Database
 
-### For Generic Food Categories
-
-1. **USDA FoodData Central** (FREE)
-   - Search API: `https://api.nal.usda.gov/fdc/v1/foods/search`
-   - Has "generic" food entries (e.g., "pizza, cheese")
-   
-2. **OpenFoodFacts Generic Products**
-   - Some products are generic (no brand)
-   - Search: `https://world.openfoodfacts.org/cgi/search.pl?search_terms=pizza`
-
-3. **Local Pre-computed Database**
-   - Bundle average nutrition for 101 foods
-   - Fastest, no API calls needed
-   - ~10KB JSON file
-
-### Example Nutrition Mapping
+### Structure
 ```typescript
 // data/food101Nutrition.ts
-export const FOOD_NUTRITION = {
+
+export interface FoodNutrition {
+  id: string;           // e.g., "pizza"
+  name: string;         // e.g., "Pizza (Cheese)"
+  serving_g: number;    // Typical serving in grams
+  calories_100g: number;
+  protein_100g: number;
+  carbs_100g: number;
+  fat_100g: number;
+  sugar_100g?: number;
+  fiber_100g?: number;
+  source: string;       // e.g., "USDA FDC #174836"
+}
+
+export const FOOD_NUTRITION: Record<string, FoodNutrition> = {
   'pizza': {
-    name: 'Pizza (cheese)',
-    serving_g: 107,  // 1 slice
+    id: 'pizza',
+    name: 'Pizza (Cheese)',
+    serving_g: 107,      // 1 slice
     calories_100g: 266,
     protein_100g: 11,
     carbs_100g: 33,
@@ -339,8 +268,9 @@ export const FOOD_NUTRITION = {
     source: 'USDA FDC #174836'
   },
   'hamburger': {
+    id: 'hamburger',
     name: 'Hamburger',
-    serving_g: 226,  // 1 burger
+    serving_g: 226,      // 1 burger
     calories_100g: 295,
     protein_100g: 17,
     carbs_100g: 24,
@@ -348,159 +278,152 @@ export const FOOD_NUTRITION = {
     sugar_100g: 5,
     source: 'USDA FDC #170720'
   },
-  // ... 99 more foods
+  // ... 99 more entries
 };
 ```
 
+### Data Sources
+| Source | Use |
+|--------|-----|
+| **USDA FoodData Central** | Primary - official US nutrition data |
+| **OpenFoodFacts** | Backup - community data |
+| **Manual research** | Fill gaps |
+
 ---
 
-## UI Design
+## 7. UI Design
 
-### New Scanner Mode: "Identify Food"
-
+### Scanner Mode Toggle
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                                                             │
-│  [Barcode]    [Photo]    [🍽️ Identify]                     │
+│  [📊 Barcode]    [📷 Label]    [🍽️ Identify]              │
 │                                                             │
 │  ┌─────────────────────────────────────────────────────┐   │
 │  │                                                     │   │
 │  │                  📸 Camera View                     │   │
 │  │                                                     │   │
-│  │         Point at food to identify                  │   │
+│  │           Point camera at your food                │   │
 │  │                                                     │   │
 │  └─────────────────────────────────────────────────────┘   │
 │                                                             │
 │  ┌─────────────────────────────────────────────────────┐   │
-│  │  🍕 Pizza                           92% confidence   │   │
-│  │  Estimated: 266 kcal / 100g                         │   │
+│  │  🍕 Pizza                           92% confident   │   │
+│  │  Estimated: 266 kcal per 100g                       │   │
 │  │                                                     │   │
-│  │  [View Details]              [Log This]             │   │
+│  │  [View Details]              [📝 Log This]         │   │
 │  └─────────────────────────────────────────────────────┘   │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### Result View
-
+### Result Modal
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                                                             │
-│  🍕 Pizza (Identified)                                      │
+│  🍕 Pizza                                                   │
+│  Identified with 92% confidence                             │
 │                                                             │
-│  ⚠️ This is an AI estimate, not exact nutrition data.      │
+│  ⚠️ AI ESTIMATE - values are approximate                   │
 │                                                             │
 │  ┌─────────────────────────────────────────────────────┐   │
 │  │  ESTIMATED NUTRITION (per 100g)                      │   │
 │  │                                                     │   │
-│  │  🔥 266 kcal    🍞 33g carbs                        │   │
-│  │  💪 11g protein  🧈 10g fat                         │   │
+│  │  🔥 266 kcal    💪 11g protein                      │   │
+│  │  🍞 33g carbs   🧈 10g fat                          │   │
 │  │  🍬 3.6g sugar                                      │   │
 │  └─────────────────────────────────────────────────────┘   │
 │                                                             │
-│  📏 Estimate your portion:                                  │
+│  📏 How much did you eat?                                   │
 │  [1 slice ~107g]  [2 slices]  [Custom]                     │
 │                                                             │
-│  [Add to Log]                                               │
+│  [📝 Add to Log]                                           │
 │                                                             │
 │  ────────────────────────────────────────────────────────  │
-│  ⚠️ DISCLAIMER: Nutrition values are estimates based on    │
-│  average data. Actual values may vary significantly.       │
-│  For accurate tracking, use packaged products with         │
-│  nutrition labels.                                         │
+│  [🔄 Not pizza? Search manually]                           │
+│                                                             │
+│  ⚠️ DISCLAIMER: AI estimates may vary from actual          │
+│  nutrition. For accurate tracking, use labeled products.   │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Dependencies to Add
+## 8. Files to Create
 
-```json
-{
-  "dependencies": {
-    // For on-device food recognition
-    "react-native-fast-tflite": "^1.5.0",
-    
-    // For camera frame processing (already have expo-camera)
-    "react-native-vision-camera": "^4.0.0",  // Optional: better frame processing
-    
-    // For GPU acceleration (optional)
-    "react-native-worklets-core": "^1.0.0"
-  }
-}
-```
-
-**Note**: These require a **development build** (`npx expo run:ios`).
-
----
-
-## Files to Create
-
+### New Files
 | File | Purpose |
 |------|---------|
-| `services/FoodRecognitionService.ts` | TFLite model loading & inference |
-| `data/food101Nutrition.ts` | Pre-computed nutrition for 101 foods |
-| `data/food101Labels.ts` | Category labels for model output |
-| `components/FoodIdentifyOverlay.tsx` | Real-time recognition UI |
-| `assets/models/food_v1.tflite` | TensorFlow Lite model (~5MB) |
+| `assets/models/food_v1.tflite` | TFLite model (~5MB) |
+| `services/FoodRecognitionService.ts` | Model loading & inference |
+| `data/food101Nutrition.ts` | Nutrition data for 101 foods |
+| `data/food101Labels.ts` | Label index mappings |
+| `components/FoodIdentifyOverlay.tsx` | "Identify" mode UI |
+| `components/FoodResultModal.tsx` | Show identified food |
+
+### Files to Modify
+| File | Changes |
+|------|---------|
+| `app/(tabs)/index.tsx` | Add "Identify" mode |
+| `components/ModeToggle.tsx` | Add third mode button |
+| `package.json` | Add TFLite dependencies |
 
 ---
 
-## Alternative: Simpler MVP
+## 9. References
 
-If TFLite integration is too complex for v2, consider:
+### Models & Datasets
+- [Food-101 Dataset](https://www.vision.ee.ethz.ch/datasets_extra/food-101/) - Original dataset
+- [TensorFlow Hub Food Model](https://tfhub.dev/google/lite-model/aiy/vision/classifier/food_V1/1) - TFLite model
+- [USDA FoodData Central](https://fdc.nal.usda.gov/) - Nutrition data
 
-### Simpler Option: Manual Food Selection
+### Libraries
+- [react-native-fast-tflite](https://github.com/mrousavy/react-native-fast-tflite) - TFLite for RN
+- [react-native-vision-camera](https://github.com/mrousavy/react-native-vision-camera) - Camera frames
 
-```
-📸 Take photo (for reference)
-         ↓
-🔍 Search: "What did you eat?"
-         ↓
-📋 Select from common foods list
-         ↓
-📊 Show nutrition + log consumption
-```
-
-This avoids ML entirely but still provides value for unpackaged foods.
+### Example Projects
+- [GantMan/Food101](https://github.com/GantMan/Food101) - React Native + CoreML
+- [FoodCalorieEstimation](https://github.com/virajmane/FoodCalorieEstimation) - Python demo
 
 ---
 
 ## Cost Summary
 
-| Approach | Setup Cost | Runtime Cost | Offline |
-|----------|------------|--------------|---------|
-| **TFLite on-device** | Free | Free | ✅ Yes |
-| **ML Kit Labels** | Free | Free | ✅ Yes |
-| **Clarifai** | Free | 5K/month free | ❌ No |
-| **LogMeal** | Free | 50/day free | ❌ No |
-| **Manual Selection** | Free | Free | ✅ Yes |
-
-**Recommendation**: Start with TFLite on-device (Option A) for v2.0, add cloud fallback later if needed.
+| Component | Cost |
+|-----------|------|
+| TFLite model | FREE |
+| react-native-fast-tflite | FREE |
+| USDA nutrition data | FREE |
+| Development time | ~4-5 days |
+| **Runtime cost** | **$0 forever** |
 
 ---
 
-## Timeline Estimate
+## Implementation Status
 
-| Phase | Task | Time |
-|-------|------|------|
-| 4A.1 | Setup react-native-fast-tflite | 0.5 day |
-| 4A.2 | Download & integrate Food-101 model | 0.5 day |
-| 4A.3 | Create FoodRecognitionService | 1 day |
-| 4A.4 | Build nutrition database (101 foods) | 0.5 day |
-| 4A.5 | Add "Identify" mode to scanner | 1 day |
-| 4A.6 | Testing & refinement | 1 day |
-| **Total** | | **4-5 days** |
+1. ✅ Plan documented
+2. ✅ Install dependencies (`react-native-fast-tflite`, `react-native-worklets-core`)
+3. ✅ Download TFLite model (`assets/models/food_v1.tflite` - 21MB)
+4. ✅ Create nutrition database (`data/food101Nutrition.ts`)
+5. ✅ Create label mappings (`data/food101Labels.ts`)
+6. ✅ Implement FoodRecognitionService (`services/FoodRecognitionService.ts`)
+7. ✅ Update ModeToggle component (3 modes: Barcode, Label, Identify)
+8. ✅ Create FoodIdentifyOverlay component
+9. ✅ Create FoodResultModal component
+10. ✅ Update scanner screen with Identify mode
+11. ✅ Update metro.config.js for .tflite assets
+12. ✅ Create babel.config.js for worklets plugin
 
----
+## Testing Notes
 
-## References
+**Requires Development Build** - The TFLite model will NOT work in Expo Go.
 
-- [Food-101 Dataset](https://www.vision.ee.ethz.ch/datasets_extra/food-101/)
-- [TensorFlow Hub Food Model](https://tfhub.dev/google/lite-model/aiy/vision/classifier/food_V1/1)
-- [react-native-fast-tflite](https://github.com/mrousavy/react-native-fast-tflite)
-- [GantMan/Food101](https://github.com/GantMan/Food101) - React Native example
-- [FoodCalorieEstimation](https://github.com/virajmane/FoodCalorieEstimation) - Python example
-- [USDA FoodData Central](https://fdc.nal.usda.gov/)
-
+To test:
+```bash
+# Clean and rebuild
+npx expo prebuild --clean
+npx expo run:ios
+# or
+npx expo run:android
+```

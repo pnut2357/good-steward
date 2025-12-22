@@ -1,4 +1,6 @@
-import ModeToggle from '@/components/ModeToggle';
+import FoodIdentifyOverlay from '@/components/FoodIdentifyOverlay';
+import FoodResultModal from '@/components/FoodResultModal';
+import ModeToggle, { ScanMode } from '@/components/ModeToggle';
 import PhotoOverlay from '@/components/PhotoOverlay';
 import PortionModal from '@/components/PortionModal';
 import ResultModal from '@/components/ResultModal';
@@ -7,12 +9,11 @@ import SearchModal from '@/components/SearchModal';
 import { NutritionData, ScanResult } from '@/models/ScanResult';
 import { analysisService } from '@/services/AnalysisService';
 import { dbService } from '@/services/DatabaseService';
+import { FoodRecognitionResult, foodRecognitionService } from '@/services/FoodRecognitionService';
 import { profileService } from '@/services/ProfileService';
 import { BarcodeScanningResult, CameraView, useCameraPermissions } from 'expo-camera';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, StyleSheet, Text, View } from 'react-native';
-
-type ScanMode = 'barcode' | 'photo';
 
 const BARCODE_TYPES = ['ean13', 'ean8', 'upc_a', 'upc_e'] as const;
 
@@ -36,9 +37,15 @@ export default function ScannerScreen() {
   const [failedBarcode, setFailedBarcode] = useState<string | undefined>();
   const [capturedPhotoUri, setCapturedPhotoUri] = useState<string | undefined>();
   
-  // Result state
+  // Result state (for barcode/photo modes)
   const [result, setResult] = useState<ScanResult | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
+  
+  // Food recognition state (for identify mode)
+  const [foodResult, setFoodResult] = useState<FoodRecognitionResult | null>(null);
+  const [foodModalVisible, setFoodModalVisible] = useState(false);
+  const [identifyPhotoUri, setIdentifyPhotoUri] = useState<string | undefined>();
+  const [foodRecognitionAvailable, setFoodRecognitionAvailable] = useState(false);
   
   // Consumption state
   const [portionModalVisible, setPortionModalVisible] = useState(false);
@@ -55,6 +62,16 @@ export default function ScannerScreen() {
     profileService.loadProfile().then(() => {
       console.log('✅ User profile loaded for filters');
     });
+    
+    // Check if food recognition is available
+    const available = foodRecognitionService.checkAvailability();
+    setFoodRecognitionAvailable(available);
+    console.log(`🍽️ Food recognition available: ${available}`);
+    
+    // Pre-load food model if available
+    if (available) {
+      foodRecognitionService.loadModel().catch(console.error);
+    }
   }, [permission]);
 
   /**
@@ -105,54 +122,94 @@ export default function ScannerScreen() {
   }, [scanned, loading, mode]);
 
   /**
-   * Handle photo capture
-   * 
-   * Flow:
-   * 1. Take photo
-   * 2. Try OCR analysis
-   * 3. If OCR works → search → show result
-   * 4. If OCR fails → show search modal with photo reference
+   * Handle photo capture (for label scanning)
    */
   const handlePhotoCapture = useCallback(async () => {
     if (!cameraRef.current || loading) return;
     
-    console.log('📸 Capturing photo...');
+    console.log('📸 Capturing photo for label...');
     
     setLoading(true);
     setLoadingMessage('Taking photo...');
 
     try {
       const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.5,  // Lower quality = faster processing
-        skipProcessing: true,  // Skip post-processing for speed
+        quality: 0.5,
+        skipProcessing: true,
       });
       
       if (!photo?.uri) {
         throw new Error('Failed to capture photo');
       }
 
-      // Save photo URI for search modal reference
       setCapturedPhotoUri(photo.uri);
 
       setLoadingMessage('Analyzing label...');
       const scanResult = await analysisService.analyzePhoto(photo.uri);
       
       if (scanResult) {
-        // OCR worked and found a match!
         dbService.saveScan(scanResult);
         setResult(scanResult);
         setModalVisible(true);
       } else {
-        // OCR not available or no text found
-        // Show search modal so user can type what they see
         console.log('📱 OCR unavailable - showing manual search');
-        setFailedBarcode(undefined); // Clear any barcode
+        setFailedBarcode(undefined);
         setSearchModalVisible(true);
       }
     } catch (error: any) {
       console.error('Photo capture error:', error);
-      // Still show search modal on error - user can manually search
       setSearchModalVisible(true);
+    } finally {
+      setLoading(false);
+    }
+  }, [loading]);
+
+  /**
+   * Handle food identification capture
+   */
+  const handleIdentifyCapture = useCallback(async () => {
+    if (!cameraRef.current || loading) return;
+    
+    console.log('🍽️ Capturing photo for food identification...');
+    
+    setLoading(true);
+    setLoadingMessage('Taking photo...');
+
+    try {
+      const photo = await cameraRef.current.takePictureAsync({
+        quality: 0.7,
+        skipProcessing: false,
+      });
+      
+      if (!photo?.uri) {
+        throw new Error('Failed to capture photo');
+      }
+
+      setIdentifyPhotoUri(photo.uri);
+      setLoadingMessage('Identifying food...');
+
+      const recognitionResult = await foodRecognitionService.recognizeFood(photo.uri);
+      
+      if (recognitionResult) {
+        setFoodResult(recognitionResult);
+        setFoodModalVisible(true);
+      } else {
+        Alert.alert(
+          'Could Not Identify',
+          'Unable to identify the food. Try taking a clearer photo or use manual search.',
+          [
+            { text: 'Try Again', onPress: () => {} },
+            { text: 'Manual Search', onPress: () => setSearchModalVisible(true) },
+          ]
+        );
+      }
+    } catch (error: any) {
+      console.error('Identify capture error:', error);
+      Alert.alert(
+        'Error',
+        error.message || 'Failed to identify food. Please try again.',
+        [{ text: 'OK' }]
+      );
     } finally {
       setLoading(false);
     }
@@ -165,6 +222,76 @@ export default function ScannerScreen() {
     setModalVisible(false);
     setResult(null);
     setTimeout(() => setScanned(false), 300);
+  }, []);
+
+  /**
+   * Close food result modal
+   */
+  const handleCloseFoodModal = useCallback(() => {
+    setFoodModalVisible(false);
+    setFoodResult(null);
+    setIdentifyPhotoUri(undefined);
+  }, []);
+
+  /**
+   * Handle logging identified food
+   */
+  const handleLogFood = useCallback((foodId: string, portionGrams: number) => {
+    const nutrition = foodRecognitionService.getNutrition(foodId);
+    if (!nutrition) return;
+
+    // Create a ScanResult-like object for the identified food
+    const timestamp = new Date().toISOString();
+    const barcode = `food101_${foodId}_${Date.now()}`;
+    
+    // Save as consumed directly
+    const scanResult: ScanResult = {
+      barcode,
+      name: nutrition.name,
+      ingredients: 'AI-identified food',
+      isSafe: true, // deprecated but required
+      timestamp,
+      summary: `AI-identified ${nutrition.name}`,
+      nutrition: {
+        calories_100g: nutrition.calories_100g,
+        protein_100g: nutrition.protein_100g,
+        carbs_100g: nutrition.carbs_100g,
+        fat_100g: nutrition.fat_100g,
+        sugar_100g: nutrition.sugar_100g,
+        serving_size_g: nutrition.serving_g,
+      },
+      dataSource: 'Food-101 AI',
+      source: 'photo',
+      consumed: true,
+    };
+
+    dbService.saveScan(scanResult);
+    dbService.addConsumption(barcode, portionGrams);
+
+    Alert.alert(
+      '✅ Added to Log',
+      `${portionGrams}g of ${nutrition.name} added to today's intake.`,
+      [{ text: 'OK' }]
+    );
+
+    handleCloseFoodModal();
+  }, [handleCloseFoodModal]);
+
+  /**
+   * Handle selecting alternate food
+   */
+  const handleSelectAlternate = useCallback((foodId: string) => {
+    const nutrition = foodRecognitionService.getNutrition(foodId);
+    if (!nutrition) return;
+
+    // Update the result with the alternate selection
+    setFoodResult(prev => prev ? {
+      ...prev,
+      foodId,
+      displayName: nutrition.name,
+      nutrition,
+      confidence: prev.alternates.find(a => a.foodId === foodId)?.confidence || prev.confidence,
+    } : null);
   }, []);
 
   /**
@@ -208,7 +335,6 @@ export default function ScannerScreen() {
   const handleEditNutrition = useCallback((barcode: string, nutrition: NutritionData) => {
     dbService.updateNutrition(barcode, nutrition);
     
-    // Update the current result if it's the same product
     if (result && result.barcode === barcode) {
       setResult({ ...result, nutrition: { ...result.nutrition, ...nutrition } });
     }
@@ -244,7 +370,6 @@ export default function ScannerScreen() {
     setLoadingMessage('Getting product info...');
 
     try {
-      // Try to fetch the selected product
       const scanResult = await analysisService.analyzeBarcode(barcode);
       
       if (scanResult) {
@@ -319,10 +444,14 @@ export default function ScannerScreen() {
       />
 
       {/* Mode-specific overlay */}
-      {mode === 'barcode' ? (
-        <ScannerOverlay />
-      ) : (
-        <PhotoOverlay onCapture={handlePhotoCapture} disabled={loading} />
+      {mode === 'barcode' && <ScannerOverlay />}
+      {mode === 'photo' && <PhotoOverlay onCapture={handlePhotoCapture} disabled={loading} />}
+      {mode === 'identify' && (
+        <FoodIdentifyOverlay 
+          onCapture={handleIdentifyCapture} 
+          disabled={loading}
+          isAvailable={foodRecognitionAvailable}
+        />
       )}
 
       {/* Mode toggle (top) */}
@@ -337,7 +466,9 @@ export default function ScannerScreen() {
             <ActivityIndicator size="large" color="#2E7D32" />
             <Text style={styles.loadingText}>{loadingMessage}</Text>
             <Text style={styles.loadingSubtext}>
-              Results are cached for instant future access
+              {mode === 'identify' 
+                ? 'AI is analyzing your food...'
+                : 'Results are cached for instant future access'}
             </Text>
           </View>
         </View>
@@ -352,13 +483,23 @@ export default function ScannerScreen() {
         </View>
       )}
 
-      {/* Result Modal */}
+      {/* Result Modal (for barcode/photo) */}
       <ResultModal
         visible={modalVisible}
         result={result}
         onClose={handleCloseModal}
         onConsume={handleConsumePress}
         onEditNutrition={handleEditNutrition}
+      />
+
+      {/* Food Result Modal (for identify) */}
+      <FoodResultModal
+        visible={foodModalVisible}
+        result={foodResult}
+        photoUri={identifyPhotoUri}
+        onClose={handleCloseFoodModal}
+        onLog={handleLogFood}
+        onSelectAlternate={handleSelectAlternate}
       />
 
       {/* Portion Selection Modal */}
@@ -369,7 +510,7 @@ export default function ScannerScreen() {
         onConfirm={handleConfirmConsumption}
       />
 
-      {/* Search Modal (when barcode not found or photo OCR fails) */}
+      {/* Search Modal */}
       <SearchModal
         visible={searchModalVisible}
         onClose={handleSearchClose}
