@@ -51,13 +51,8 @@ export default function ScannerScreen() {
   const [portionModalVisible, setPortionModalVisible] = useState(false);
   const [productToConsume, setProductToConsume] = useState<ScanResult | null>(null);
 
-  // Request permission and load profile on mount
+  // Load profile and check food recognition on mount (runs once)
   useEffect(() => {
-    // Request camera permission
-    if (permission && !permission.granted && permission.canAskAgain) {
-      requestPermission();
-    }
-    
     // Load user profile so filters work
     profileService.loadProfile().then(() => {
       console.log('✅ User profile loaded for filters');
@@ -72,7 +67,14 @@ export default function ScannerScreen() {
     if (available) {
       foodRecognitionService.loadModel().catch(console.error);
     }
-  }, [permission]);
+  }, []); // Empty deps - run once on mount
+  
+  // Request camera permission (separate effect to avoid infinite loop)
+  useEffect(() => {
+    if (permission && !permission.granted && permission.canAskAgain) {
+      requestPermission();
+    }
+  }, [permission?.granted, permission?.canAskAgain]); // Only re-run when these specific values change
 
   /**
    * Handle barcode scan
