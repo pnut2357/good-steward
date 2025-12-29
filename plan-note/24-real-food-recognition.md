@@ -1,23 +1,28 @@
 # Phase 4: Real Food Recognition
 
-> **Last Updated**: December 21, 2024  
-> **Status**: ✅ IMPLEMENTED  
-> **Priority**: Medium  
-> **Complexity**: Medium-High
+> **Last Updated**: December 29, 2024  
+> **Status**: ✅ IMPLEMENTED (FREE Vision APIs)  
+> **Priority**: High  
+> **Complexity**: Medium  
+> **Cost**: **$0** (All providers are free)
 
 ---
 
 ## 📋 Table of Contents
 
 1. [Problem Statement](#1-problem-statement)
-2. [Solution Options Comparison](#2-solution-options-comparison)
-3. [Recommended Approach](#3-recommended-approach)
-4. [Implementation Plan](#4-implementation-plan)
-5. [Food-101 Model Details](#5-food-101-model-details)
-6. [Nutrition Database](#6-nutrition-database)
-7. [UI Design](#7-ui-design)
-8. [Files to Create](#8-files-to-create)
-9. [References](#9-references)
+2. [Current Implementation](#2-current-implementation)
+3. [FREE Vision Strategy](#3-free-vision-strategy)
+4. [Solution Options Comparison 2025](#4-solution-options-comparison-2025)
+5. [Recommended: Hybrid Architecture](#5-recommended-hybrid-architecture)
+6. [Implementation Plan](#6-implementation-plan)
+7. [Food-101 Model Details (Legacy)](#7-food-101-model-details-legacy)
+8. [Nutrition Database](#8-nutrition-database)
+9. [UI Design](#9-ui-design)
+10. [Files to Create/Modify](#10-files-to-createmodify)
+11. [References](#11-references)
+
+**See also:** [26-vision-api-strategy.md](./26-vision-api-strategy.md) for detailed API strategy
 
 ---
 
@@ -27,174 +32,274 @@
 - **Barcode scanning** → OpenFoodFacts lookup
 - **Photo of packaged product** → OCR → Search database
 - **Nutrition label scanning** → OCR → Parse values
+- **TFLite Food-101** → On-device food recognition (101 categories only)
 
 ### What's Missing 🔮
 | Scenario | Current Behavior | Desired Behavior |
 |----------|------------------|------------------|
-| Photo of pizza | "Product not found" | "Pizza - ~266 kcal/100g" |
-| Fresh apple | No barcode to scan | "Apple - ~52 kcal/100g" |
-| Restaurant meal | Can't identify | "Hamburger - ~295 kcal/100g" |
-| Homemade salad | No label | "Salad - ~20 kcal/100g" |
+| Photo of pizza | "Pizza" (if in 101 categories) | "Pizza with pepperoni - ~285 kcal/slice" |
+| Mixed plate (burger + fries) | Only identifies ONE food | "Hamburger + French Fries - ~650 kcal" |
+| Fresh fruits/vegetables | Limited recognition | "Red Apple (Fuji) - ~52 kcal/100g" |
+| Restaurant meal | Generic guess | "Pad Thai with shrimp - ~350 kcal" |
+| Homemade salad | "Salad" only | "Caesar salad with chicken - ~180 kcal" |
+| Unknown ethnic foods | Fails entirely | "Bibimbap - ~580 kcal" |
 
-### The Goal
+### The Problem with Food-101
+The current TFLite Food-101 model:
+- ❌ **Outdated** - trained in 2014, only 101 categories
+- ❌ **No mixed plates** - can't identify multiple foods
+- ❌ **No portions** - can't estimate serving size
+- ❌ **Fixed vocabulary** - fails on foods outside 101 categories
+- ❌ **Requires dev build** - doesn't work in Expo Go
+
+---
+
+## 2. Current Implementation (TFLite)
+
+### What's Implemented ✅
+| Component | Status | File |
+|-----------|--------|------|
+| TFLite model (~21MB) | ✅ | `assets/models/food_v1.tflite` |
+| FoodRecognitionService | ✅ | `services/FoodRecognitionService.ts` |
+| Food-101 labels | ✅ | `data/food101Labels.ts` |
+| Food-101 nutrition | ✅ | `data/food101Nutrition.ts` |
+| FoodIdentifyOverlay | ✅ | `components/FoodIdentifyOverlay.tsx` |
+| FoodResultModal | ✅ | `components/FoodResultModal.tsx` |
+
+### Limitations
 ```
-📸 Photo of ANY food
-       ↓
-🤖 AI identifies: "Pizza"
-       ↓
-📊 Shows: ~266 kcal, 11g protein, 33g carbs
-       ↓
-📝 User logs consumption
+📱 Current: Food-101 TFLite
+- Only 101 food categories
+- Single food per image
+- No portion estimation
+- Requires Development Build (not Expo Go)
 ```
 
 ---
 
-## 2. Solution Options Comparison
+## 3. FREE Vision Strategy
 
-### Option A: On-Device TFLite ⭐ RECOMMENDED
-| Aspect | Details |
-|--------|---------|
-| **How it works** | Download model once (~5MB), runs on phone |
-| **Cost** | FREE forever |
-| **Speed** | 50-200ms |
-| **Offline** | ✅ Yes |
-| **Accuracy** | Good (101 food categories) |
-| **Requirements** | Dev build (`npx expo run:ios`) |
+### Why FREE Vision APIs?
+- ⚠️ **Groq Vision**: Decommissioned (December 2024)
+- ⚠️ **Together.ai**: Requires payment for most models
+- ✅ **HuggingFace**: 100% FREE, no credit card required
+- ✅ **OpenRouter**: FREE tier available
 
-```
-📱 App contains TFLite model
-       ↓
-📸 Photo taken
-       ↓
-🧠 On-device inference (no internet)
-       ↓
-🍕 "Pizza" (confidence: 92%)
-```
+### Our FREE Solution
 
-### Option B: Cloud APIs
-| Provider | Free Tier | Food-Specific | Offline |
-|----------|-----------|---------------|---------|
-| **Clarifai** | 1,000/month | ✅ Yes | ❌ No |
-| **Google Vision** | 1,000/month | ❌ Generic | ❌ No |
-| **LogMeal** | 50/day | ✅ Yes + nutrition | ❌ No |
+| Priority | Provider | Model | Cost | Accuracy |
+|----------|----------|-------|------|----------|
+| 1️⃣ | **HuggingFace** | BLIP Large | **FREE** | Medium |
+| 2️⃣ | **OpenRouter** | Llama 3.2 11B | **FREE tier** | High |
+| 3️⃣ | **TFLite** | Food-101 | **FREE** | Limited (101) |
 
-⚠️ **Cloud APIs are NOT downloaded** - you send images to their servers.
+### Best Open Source Vision Models (2025)
+Source: [Koyeb - Best Multimodal Vision Models 2025](https://www.koyeb.com/blog/best-multimodal-vision-models-in-2025)
 
-### Option C: ML Kit Image Labeling
-| Aspect | Details |
-|--------|---------|
-| **How it works** | Google's on-device ML |
-| **Cost** | FREE |
-| **Offline** | ✅ Yes |
-| **Food-specific** | ❌ No (generic labels) |
+| Model | Developer | Size | License |
+|-------|-----------|------|---------|
+| **Gemma 3** | Google | 4B-27B | Open weights |
+| **Qwen 2.5 VL** | Alibaba | 7B-72B | Apache 2.0 |
+| **Pixtral** | Mistral | 12B-124B | Apache 2.0 |
+| **Phi-4 Multimodal** | Microsoft | 5.6B | MIT |
+| **DeepSeek Janus-Pro** | DeepSeek | 7B | MIT |
+| **Llama 3.2 Vision** | Meta | 11B-90B | Llama License |
 
-❌ **Problem**: Returns "food" instead of "pizza"
-
-### Option D: Manual Selection (Simplest)
-| Aspect | Details |
-|--------|---------|
-| **How it works** | User searches/selects food type |
-| **Cost** | FREE |
-| **Offline** | ✅ Yes |
-| **Accuracy** | User-dependent |
-
-```
-📸 Take photo (reference only)
-       ↓
-🔍 User searches: "pizza"
-       ↓
-📋 Select from list
-       ↓
-📊 Show nutrition
-```
+### Recommendation: **HuggingFace BLIP**
+- **Cost**: $0 (100% free, no credit card)
+- **Latency**: ~1-3 seconds
+- **Works in Expo Go**: No native modules needed
+- **Reliability**: Stable, no rate limits for normal use
 
 ---
 
-## 3. Recommended Approach
+## 4. Solution Options Comparison 2025
 
-### Primary: TFLite Food-101 (On-Device)
-**Why this approach?**
-- ✅ **100% FREE** - no API costs, ever
-- ✅ **Works offline** - no internet needed
-- ✅ **Fast** - 50-200ms inference
-- ✅ **Private** - images never leave device
-- ✅ **Food-specific** - trained on 101 food categories
-
-### Fallback: Manual Selection
-If AI confidence is low (<60%), let user manually select:
-```
-🤖 AI: "Not sure... maybe pizza? (45%)"
-       ↓
-👤 User: Selects "Pizza" from list
-       ↓
-📊 Show nutrition
-```
-
-### Architecture
-```
-┌─────────────────────────────────────────────────────────────┐
-│  REAL FOOD RECOGNITION FLOW                                 │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  📸 User takes photo of food                                │
-│         ↓                                                   │
-│  🧠 TFLite Model (on-device)                               │
-│         ↓                                                   │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │ Confidence >= 70%?                                  │   │
-│  │   YES → Show result: "🍕 Pizza (92%)"              │   │
-│  │   NO  → Show options: "Did you mean: Pizza? Bread?"│   │
-│  └─────────────────────────────────────────────────────┘   │
-│         ↓                                                   │
-│  📊 Lookup nutrition from local database                    │
-│         ↓                                                   │
-│  📱 Display: 266 kcal, 11g protein, 33g carbs              │
-│         ↓                                                   │
-│  📝 User can log consumption                                │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
+| Approach | Cost | Speed | Offline | Accuracy | Mixed Plates | Expo Go |
+|----------|------|-------|---------|----------|--------------|---------|
+| **TFLite Food-101** (current) | FREE | 50-200ms | ✅ Yes | Limited (101) | ❌ No | ❌ No |
+| **Vision LLM** (proposed) | FREE tier | 300-800ms | ❌ No | Excellent | ✅ Yes | ✅ Yes |
+| **Hybrid** ⭐ (recommended) | FREE | Best of both | ✅ Fallback | Excellent | ✅ Yes | ✅ Yes |
+| Clarifai Food | $0.002/call | 500-1500ms | ❌ No | Good | ❌ No | ✅ Yes |
+| Google Vision | $1.50/1000 | 300-600ms | ❌ No | Generic | ❌ No | ✅ Yes |
 
 ---
 
-## 4. Implementation Plan
+## 5. Recommended: Hybrid Architecture
 
-### Phase 4A: Core Food Recognition (3-4 days)
+### Architecture Diagram
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                 FOOD RECOGNITION FLOW (v2.0)                     │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  📸 User takes photo of food                                     │
+│         │                                                        │
+│         ▼                                                        │
+│  ┌──────────────────┐                                           │
+│  │  Check Network   │                                           │
+│  └────────┬─────────┘                                           │
+│           │                                                      │
+│     ┌─────┴─────┐                                               │
+│     │           │                                                │
+│  Online      Offline                                             │
+│     │           │                                                │
+│     ▼           ▼                                                │
+│  ┌──────────────────┐    ┌──────────────────────────────┐       │
+│  │  Vision LLM API  │    │  TFLite Food-101 (fallback)  │       │
+│  │  (Groq + Llama)  │    │  On-device, 101 categories   │       │
+│  └────────┬─────────┘    └──────────────┬───────────────┘       │
+│           │                             │                        │
+│           └──────────┬──────────────────┘                        │
+│                      ▼                                           │
+│           ┌──────────────────────────────┐                       │
+│           │  Merge/Display Results       │                       │
+│           │                              │                       │
+│           │  🍕 Pizza with Pepperoni     │                       │
+│           │  🍟 + French Fries           │                       │
+│           │  🥗 + Side Salad             │                       │
+│           │                              │                       │
+│           │  Total: ~850 kcal            │                       │
+│           └──────────────────────────────┘                       │
+│                      │                                           │
+│                      ▼                                           │
+│           ┌──────────────────────────────┐                       │
+│           │  📝 User confirms & logs     │                       │
+│           └──────────────────────────────┘                       │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
 
+### Priority Order
+1. **Online + Vision LLM** (best quality, unlimited foods)
+2. **Offline + TFLite** (fallback, 101 foods only)
+3. **Manual Selection** (user picks from list)
+
+---
+
+## 6. Implementation Plan
+
+### Phase 4A: TFLite Food-101 ✅ COMPLETE
+| Step | Task | Status |
+|------|------|--------|
+| 4A.1 | Install dependencies | ✅ Done |
+| 4A.2 | Download & bundle TFLite model | ✅ Done |
+| 4A.3 | Create `FoodRecognitionService.ts` | ✅ Done |
+| 4A.4 | Create `food101Nutrition.ts` database | ✅ Done |
+| 4A.5 | Add "Identify" mode to scanner | ✅ Done |
+| 4A.6 | Testing & refinement | ✅ Done |
+
+### Phase 4B: Vision LLM Upgrade ✅ COMPLETE
 | Step | Task | Time | Status |
 |------|------|------|--------|
-| 4A.1 | Install dependencies | 0.5 day | 📋 |
-| 4A.2 | Download & bundle TFLite model | 0.5 day | 📋 |
-| 4A.3 | Create `FoodRecognitionService.ts` | 1 day | 📋 |
-| 4A.4 | Create `food101Nutrition.ts` database | 0.5 day | 📋 |
-| 4A.5 | Add "Identify" mode to scanner | 1 day | 📋 |
-| 4A.6 | Testing & refinement | 0.5 day | 📋 |
+| 4B.1 | Get Groq API key | 5 min | ✅ User action needed |
+| 4B.2 | Create `VisionFoodService.ts` | 1 day | ✅ Done |
+| 4B.3 | Update scanner to use Vision LLM as primary | 0.5 day | ✅ Done |
+| 4B.4 | Add network check for hybrid fallback | 0.5 day | ✅ Done |
+| 4B.5 | Update UI for mixed plate display | 0.5 day | ✅ Done |
+| 4B.6 | Testing & refinement | 0.5 day | 📋 User testing |
 
-### Dependencies to Install
-```bash
-# TensorFlow Lite for React Native
-npm install react-native-fast-tflite
+### Vision LLM Service Implementation
+```typescript
+// services/VisionFoodService.ts
+import * as FileSystem from 'expo-file-system';
 
-# Required peer dependency
-npm install react-native-worklets-core
+const GROQ_API_KEY = process.env.EXPO_PUBLIC_GROQ_API_KEY;
 
-# Create development build (required!)
-npx expo run:ios
-# or
-npx expo run:android
+export interface VisionFoodResult {
+  items: Array<{
+    name: string;
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+    portion_g: number;
+  }>;
+  totalCalories: number;
+  confidence: 'high' | 'medium' | 'low';
+  description: string;
+}
+
+export async function recognizeFoodWithVision(imageUri: string): Promise<VisionFoodResult> {
+  // Read image as base64
+  const file = new FileSystem.File(imageUri);
+  const base64 = await file.base64();
+
+  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${GROQ_API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: "llama-3.2-90b-vision-preview", // or 11b for faster
+      messages: [{
+        role: "user",
+        content: [
+          { 
+            type: "text", 
+            text: `Analyze this food photo. Identify ALL food items visible.
+For each item, estimate nutrition per portion shown.
+
+Return ONLY valid JSON:
+{
+  "items": [
+    {
+      "name": "Food name",
+      "calories": number,
+      "protein": number (grams),
+      "carbs": number (grams),
+      "fat": number (grams),
+      "portion_g": estimated weight in grams
+    }
+  ],
+  "totalCalories": sum of all calories,
+  "confidence": "high|medium|low",
+  "description": "Brief description of what you see"
+}`
+          },
+          { 
+            type: "image_url", 
+            image_url: { url: `data:image/jpeg;base64,${base64}` } 
+          }
+        ]
+      }],
+      temperature: 0.1,
+      max_tokens: 800
+    })
+  });
+
+  const data = await response.json();
+  const content = data.choices[0].message.content;
+  
+  // Parse JSON from response
+  const jsonMatch = content.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    return JSON.parse(jsonMatch[0]);
+  }
+  
+  throw new Error('Could not parse food recognition result');
+}
 ```
 
-### Phase 4B: Enhancements (Optional, 2-3 days)
-| Step | Task | Time |
-|------|------|------|
-| 4B.1 | Add manual food search fallback | 0.5 day |
-| 4B.2 | Add common portion presets | 0.5 day |
-| 4B.3 | Add "Not this food" correction flow | 0.5 day |
-| 4B.4 | Improve UI/UX | 1 day |
+### Dependencies
+```bash
+# For Vision LLM (works in Expo Go!)
+# No new packages needed - uses fetch API
+
+# For TFLite fallback (already installed)
+npm install react-native-fast-tflite react-native-worklets-core
+```
+
+### Environment Setup
+```bash
+# .env
+EXPO_PUBLIC_GROQ_API_KEY=gsk_xxxxx  # Get from https://console.groq.com
+```
 
 ---
 
-## 5. Food-101 Model Details
+## 7. Food-101 Model Details (Legacy)
 
 ### Model Source
 - **TensorFlow Hub**: [Food V1](https://tfhub.dev/google/lite-model/aiy/vision/classifier/food_V1/1)
@@ -236,7 +341,7 @@ waffles
 
 ---
 
-## 6. Nutrition Database
+## 8. Nutrition Database
 
 ### Structure
 ```typescript
@@ -291,7 +396,7 @@ export const FOOD_NUTRITION: Record<string, FoodNutrition> = {
 
 ---
 
-## 7. UI Design
+## 9. UI Design
 
 ### Scanner Mode Toggle
 ```
@@ -350,28 +455,35 @@ export const FOOD_NUTRITION: Record<string, FoodNutrition> = {
 
 ---
 
-## 8. Files to Create
+## 10. Files to Create/Modify
 
-### New Files
-| File | Purpose |
-|------|---------|
-| `assets/models/food_v1.tflite` | TFLite model (~5MB) |
-| `services/FoodRecognitionService.ts` | Model loading & inference |
-| `data/food101Nutrition.ts` | Nutrition data for 101 foods |
-| `data/food101Labels.ts` | Label index mappings |
-| `components/FoodIdentifyOverlay.tsx` | "Identify" mode UI |
-| `components/FoodResultModal.tsx` | Show identified food |
+### Phase 4A Files ✅ (Already Created)
+| File | Purpose | Status |
+|------|---------|--------|
+| `assets/models/food_v1.tflite` | TFLite model (~21MB) | ✅ Done |
+| `services/FoodRecognitionService.ts` | TFLite model loading & inference | ✅ Done |
+| `data/food101Nutrition.ts` | Nutrition data for 101 foods | ✅ Done |
+| `data/food101Labels.ts` | Label index mappings | ✅ Done |
+| `components/FoodIdentifyOverlay.tsx` | "Identify" mode UI | ✅ Done |
+| `components/FoodResultModal.tsx` | Show identified food | ✅ Done |
 
-### Files to Modify
+### Phase 4B Files (Vision LLM Upgrade) ✅ COMPLETE
+| File | Purpose | Status |
+|------|---------|--------|
+| `services/VisionFoodService.ts` | Groq Vision LLM integration | ✅ Created |
+| `services/HybridFoodService.ts` | Combines Vision LLM + TFLite | ✅ Created |
+| `components/HybridFoodResultModal.tsx` | Display results w/ mixed plates | ✅ Created |
+
+### Files Modified (Phase 4B) ✅
 | File | Changes |
 |------|---------|
-| `app/(tabs)/index.tsx` | Add "Identify" mode |
-| `components/ModeToggle.tsx` | Add third mode button |
-| `package.json` | Add TFLite dependencies |
+| `app/(tabs)/index.tsx` | Uses hybrid service, handles mixed plates |
+| `components/FoodIdentifyOverlay.tsx` | Shows which AI method will be used |
+| `.env` | Add EXPO_PUBLIC_GROQ_API_KEY (user action) |
 
 ---
 
-## 9. References
+## 11. References
 
 ### Models & Datasets
 - [Food-101 Dataset](https://www.vision.ee.ethz.ch/datasets_extra/food-101/) - Original dataset
@@ -386,44 +498,81 @@ export const FOOD_NUTRITION: Record<string, FoodNutrition> = {
 - [GantMan/Food101](https://github.com/GantMan/Food101) - React Native + CoreML
 - [FoodCalorieEstimation](https://github.com/virajmane/FoodCalorieEstimation) - Python demo
 
+### Vision LLMs (2025)
+| Resource | Description | Link |
+|----------|-------------|------|
+| **Groq Vision** | Free Llama 3.2 Vision API | [console.groq.com](https://console.groq.com) |
+| **Qwen 2.5 VL** | Alibaba multimodal model | [huggingface.co/Qwen](https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct) |
+| **Gemma 3** | Google multimodal (4B-27B) | [ai.google.dev](https://ai.google.dev/gemma) |
+| **Phi-4 Multimodal** | Microsoft (MIT license) | [huggingface.co/microsoft](https://huggingface.co/microsoft/phi-4-multimodal) |
+| **Koyeb Blog** | Vision model comparison | [koyeb.com](https://www.koyeb.com/blog/best-multimodal-vision-models-in-2025) |
+| **Kaludi Food Classifier** | HuggingFace model | [huggingface.co](https://huggingface.co/Kaludi/food-category-classification) |
+
 ---
 
 ## Cost Summary
 
-| Component | Cost |
-|-----------|------|
-| TFLite model | FREE |
-| react-native-fast-tflite | FREE |
-| USDA nutrition data | FREE |
-| Development time | ~4-5 days |
-| **Runtime cost** | **$0 forever** |
+| Component | Cost | Notes |
+|-----------|------|-------|
+| TFLite model | FREE | Bundled in app (21MB) |
+| Groq Vision API | FREE | ~14,400 req/day free tier |
+| USDA nutrition data | FREE | Public domain |
+| Development time | ~2-3 days | For Vision LLM upgrade |
+| **Runtime cost** | **$0** | Within free tier limits |
 
 ---
 
 ## Implementation Status
 
-1. ✅ Plan documented
-2. ✅ Install dependencies (`react-native-fast-tflite`, `react-native-worklets-core`)
-3. ✅ Download TFLite model (`assets/models/food_v1.tflite` - 21MB)
-4. ✅ Create nutrition database (`data/food101Nutrition.ts`)
-5. ✅ Create label mappings (`data/food101Labels.ts`)
-6. ✅ Implement FoodRecognitionService (`services/FoodRecognitionService.ts`)
-7. ✅ Update ModeToggle component (3 modes: Barcode, Label, Identify)
-8. ✅ Create FoodIdentifyOverlay component
-9. ✅ Create FoodResultModal component
-10. ✅ Update scanner screen with Identify mode
-11. ✅ Update metro.config.js for .tflite assets
-12. ✅ Create babel.config.js for worklets plugin
+### Phase 4A: TFLite ✅ COMPLETE
+1. ✅ Install dependencies (`react-native-fast-tflite`, `react-native-worklets-core`)
+2. ✅ Download TFLite model (`assets/models/food_v1.tflite` - 21MB)
+3. ✅ Create nutrition database (`data/food101Nutrition.ts`)
+4. ✅ Create label mappings (`data/food101Labels.ts`)
+5. ✅ Implement FoodRecognitionService (`services/FoodRecognitionService.ts`)
+6. ✅ Update ModeToggle component (3 modes: Barcode, Label, Identify)
+7. ✅ Create FoodIdentifyOverlay component
+8. ✅ Create FoodResultModal component
+9. ✅ Update scanner screen with Identify mode
+10. ✅ Update metro.config.js for .tflite assets
+11. ✅ Create babel.config.js for worklets plugin
+
+### Phase 4B: Vision LLM Upgrade ✅ IMPLEMENTED
+1. ✅ Get Groq API key from https://console.groq.com (user action)
+2. ✅ Add `EXPO_PUBLIC_GROQ_API_KEY` to `.env` (user action)
+3. ✅ Create `VisionFoodService.ts`
+4. ✅ Create `HybridFoodService.ts` (Vision LLM + TFLite fallback)
+5. ✅ Update scanner to use hybrid approach
+6. ✅ Add UI for mixed plate display
+7. 📋 Test with various food types (user testing)
 
 ## Testing Notes
 
+### TFLite Mode (Offline Fallback)
 **Requires Development Build** - The TFLite model will NOT work in Expo Go.
-
-To test:
 ```bash
-# Clean and rebuild
 npx expo prebuild --clean
-npx expo run:ios
-# or
-npx expo run:android
+npx expo run:ios --device
 ```
+
+### Vision LLM Mode (Recommended)
+**Works in Expo Go!** - No native modules needed.
+```bash
+npx expo start
+# Scan QR with Expo Go app
+```
+
+---
+
+## Comparison: Food-101 vs Vision LLM
+
+| Aspect | Food-101 (Current) | Vision LLM (Upgrade) |
+|--------|-------------------|---------------------|
+| **Categories** | 101 fixed | Unlimited |
+| **Mixed plates** | ❌ No | ✅ Yes |
+| **Portions** | ❌ No | ✅ Estimates |
+| **Offline** | ✅ Yes | ❌ No |
+| **Expo Go** | ❌ No | ✅ Yes |
+| **Accuracy** | Limited | Excellent |
+| **Latency** | 50-200ms | 300-800ms |
+| **Cost** | $0 | $0 (free tier) |
