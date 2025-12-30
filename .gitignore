@@ -188,3 +188,6 @@ dist
 .envs-looper
 coverage.json
 coverage.xml
+# Transformers.js model cache (downloaded at runtime)
+.transformers-cache/
+

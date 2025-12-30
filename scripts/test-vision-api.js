@@ -19,6 +19,7 @@ if (!openrouterKey) {
 }
 
 const imagesToTest = [
+  'assets/images/food04-apple.jpg',
   'assets/images/food01-pizza.jpg',
   'assets/images/food03-hamburger.jpg'
 ];

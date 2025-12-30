@@ -1,10 +1,13 @@
 # Phase 4: Real Food Recognition
 
 > **Last Updated**: December 29, 2024  
-> **Status**: ✅ IMPLEMENTED (FREE Vision APIs)  
+> **Status**: ✅ IMPLEMENTED (Hybrid Vision Strategy)  
 > **Priority**: High  
 > **Complexity**: Medium  
 > **Cost**: **$0** (All providers are free)
+>
+> ⚠️ **UPDATE December 29, 2024**: Groq Vision & HuggingFace free APIs are now unreliable.
+> New strategy: OpenRouter (50/day) + Local BLIP (unlimited offline)
 
 ---
 
@@ -77,21 +80,25 @@ The current TFLite Food-101 model:
 
 ---
 
-## 3. FREE Vision Strategy
+## 3. FREE Vision Strategy (Updated Dec 2024)
 
-### Why FREE Vision APIs?
-- ⚠️ **Groq Vision**: Decommissioned (December 2024)
-- ⚠️ **Together.ai**: Requires payment for most models
-- ✅ **HuggingFace**: 100% FREE, no credit card required
-- ✅ **OpenRouter**: FREE tier available
+### API Status (Tested Dec 29, 2024)
 
-### Our FREE Solution
+| Provider | Status | Notes |
+|----------|--------|-------|
+| ❌ **Groq Vision** | DEAD | All Llama vision models decommissioned |
+| ❌ **HuggingFace API** | BROKEN | Returns HTTP 410/404 errors |
+| ⏳ **OpenRouter** | WORKING | 50 req/day free, resets daily |
+| ✅ **Local BLIP** | WORKING | Unlimited, offline, ~2 seconds |
 
-| Priority | Provider | Model | Cost | Accuracy |
-|----------|----------|-------|------|----------|
-| 1️⃣ | **HuggingFace** | BLIP Large | **FREE** | Medium |
-| 2️⃣ | **OpenRouter** | Llama 3.2 11B | **FREE tier** | High |
-| 3️⃣ | **TFLite** | Food-101 | **FREE** | Limited (101) |
+### Our UPDATED Solution
+
+| Priority | Provider | Model | Cost | Accuracy | Limit |
+|----------|----------|-------|------|----------|-------|
+| 1️⃣ | **OpenRouter** | Gemini 2.0 Flash | **FREE** | Excellent | 50/day |
+| 2️⃣ | **Local BLIP** | vit-gpt2 | **FREE** | Good | Unlimited |
+| 3️⃣ | **TFLite** | Food-101 | **FREE** | Limited | Unlimited |
+| 4️⃣ | **USDA Search** | Text search | **FREE** | N/A | Unlimited |
 
 ### Best Open Source Vision Models (2025)
 Source: [Koyeb - Best Multimodal Vision Models 2025](https://www.koyeb.com/blog/best-multimodal-vision-models-in-2025)
@@ -105,11 +112,30 @@ Source: [Koyeb - Best Multimodal Vision Models 2025](https://www.koyeb.com/blog/
 | **DeepSeek Janus-Pro** | DeepSeek | 7B | MIT |
 | **Llama 3.2 Vision** | Meta | 11B-90B | Llama License |
 
-### Recommendation: **HuggingFace BLIP**
-- **Cost**: $0 (100% free, no credit card)
-- **Latency**: ~1-3 seconds
-- **Works in Expo Go**: No native modules needed
-- **Reliability**: Stable, no rate limits for normal use
+### Current Recommendation: **3-Tier Strategy**
+
+**Tier 1: OpenRouter (Online, Daily Use)**
+- **Model**: `google/gemini-2.0-flash-exp:free`
+- **Cost**: $0 (50 req/day free, or $10 for 1000/day)
+- **Latency**: 1-3 seconds
+- **Works in Expo Go**: ✅ Yes
+- **Accuracy**: Excellent (identifies any food, estimates portions)
+
+**Tier 2: Local BLIP (Offline/Unlimited)**
+- **Model**: `Xenova/vit-gpt2-image-captioning`
+- **Cost**: $0 (unlimited, local)
+- **Latency**: ~2 seconds (first load ~5s)
+- **Works offline**: ✅ Yes
+- **Accuracy**: Good (image captioning, not nutrition estimation)
+- **Integration**: `@xenova/transformers` + `onnxruntime-react-native`
+
+**Tier 3: Food-101 TFLite (Offline, Limited)**
+- **Model**: `food_v1.tflite` (21MB)
+- **Cost**: $0 (bundled)
+- **Latency**: 50-200ms
+- **Works offline**: ✅ Yes
+- **Accuracy**: Limited (only 101 food categories)
+- **Requires**: Development build (not Expo Go)
 
 ---
 
@@ -510,15 +536,102 @@ export const FOOD_NUTRITION: Record<string, FoodNutrition> = {
 
 ---
 
-## Cost Summary
+## Cost Summary (Updated Dec 2024)
 
 | Component | Cost | Notes |
 |-----------|------|-------|
 | TFLite model | FREE | Bundled in app (21MB) |
-| Groq Vision API | FREE | ~14,400 req/day free tier |
+| ~~Groq Vision API~~ | ~~FREE~~ | ❌ DECOMMISSIONED Dec 2024 |
+| OpenRouter Gemini | FREE | 50 req/day (or $10 for 1000/day) |
+| Local BLIP | FREE | Unlimited, offline (~400MB model) |
 | USDA nutrition data | FREE | Public domain |
 | Development time | ~2-3 days | For Vision LLM upgrade |
 | **Runtime cost** | **$0** | Within free tier limits |
+
+---
+
+## Local Vision Integration ✅ IMPLEMENTED
+
+### What's Available Now
+
+| Component | Status | File |
+|-----------|--------|------|
+| 500+ Food Labels | ✅ Done | `data/foodLabels.ts` |
+| Basic Nutrition DB | ✅ Done | `data/foodLabels.ts` |
+| ONNX Runtime Installed | ✅ Done | `package.json` |
+| LocalVisionService | ✅ Done | `services/LocalVisionService.ts` |
+| WebViewVisionService | ✅ Done | `services/WebViewVisionService.ts` |
+| Rate Limit Handling | ✅ Done | `services/HybridFoodService.ts` |
+
+### Tested Results (Node.js with Transformers.js)
+| Image | Caption | Latency |
+|-------|---------|---------|
+| Apple | "a red apple is on a red apple" | 582ms |
+| Hamburger | "a sandwich and french fries on a plate" | 613ms |
+| Pizza | "a pizza with a slice cut out of it" | 546ms |
+
+### Three Local Vision Approaches
+
+**Approach 1: WebView + Transformers.js (Works in Expo Go!)**
+- Uses a hidden WebView to run BLIP model
+- Model cached in browser storage (~400MB)
+- No native modules needed
+- File: `services/WebViewVisionService.ts`
+
+**Approach 2: ONNX Runtime React Native (Dev Build Only)**
+- Uses CLIP model for zero-shot classification
+- 500+ food labels for matching
+- Requires development build
+- File: `services/LocalVisionService.ts`
+
+**Approach 3: Hybrid (Current Default)**
+- OpenRouter Vision LLM (50 free/day)
+- Falls back to TFLite Food-101 (101 categories)
+- Falls back to manual search (500+ foods)
+- File: `services/HybridFoodService.ts`
+
+### Food Labels Database
+```
+Total: 500+ food items
+Categories:
+- Fruits (52 items)
+- Vegetables (55 items)
+- Pizza varieties (15 items)
+- Sandwiches & Burgers (53 items)
+- Pasta & Noodles (45 items)
+- Rice dishes (35 items)
+- Japanese (45 items)
+- Chinese (35 items)
+- Korean (25 items)
+- Indian (40 items)
+- Mexican (35 items)
+- Thai (20 items)
+- Vietnamese (15 items)
+- Middle Eastern (20 items)
+- Meat & Protein (70 items)
+- Seafood (55 items)
+- Breakfast (65 items)
+- Salads (30 items)
+- Soups (45 items)
+- Bread & Bakery (20 items)
+- Desserts (85 items)
+- Snacks (30 items)
+```
+
+### Installed Dependencies
+```json
+{
+  "onnxruntime-react-native": "^1.23.2",
+  "@xenova/transformers": "^2.17.2"
+}
+```
+
+### API Usage Tracking
+The HybridFoodService now includes:
+- `getServiceStatus()` - Check all methods and rate limits
+- `getStatusMessage()` - User-friendly status message
+- `searchExpandedFoods()` - Search 500+ food labels
+- Rate limit error handling with helpful messages
 
 ---
 

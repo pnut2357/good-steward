@@ -18,17 +18,24 @@
 import * as FileSystem from 'expo-file-system';
 import * as Network from 'expo-network';
 
-// Provider configurations
+// Provider configurations with multiple fallback models
 const PROVIDERS = {
   openrouter: {
     url: 'https://openrouter.ai/api/v1/chat/completions',
-    // Using Google Gemini 2.0 Flash (Free) as it is more reliable than Llama 3.2 Vision on free tier
-    model: 'google/gemini-2.0-flash-exp:free', 
-    modelFast: 'google/gemini-2.0-flash-exp:free',
     keyEnv: 'EXPO_PUBLIC_OPENROUTER_API_KEY',
     type: 'chat' as const,
+    // Models to try in order (some may be temporarily unavailable)
+    models: [
+      'google/gemini-2.0-flash-exp:free',      // Fast, usually available
+      'google/gemma-3-27b-it:free',            // Backup Google model  
+      'meta-llama/llama-3.2-11b-vision-instruct:free', // Meta backup
+      'qwen/qwen2.5-vl-72b-instruct:free',     // Alibaba backup
+    ],
   },
 };
+
+// Track which model is currently working
+let lastWorkingModel: string | null = null;
 
 export interface VisionServiceOptions {
   useFastModel?: boolean;
@@ -100,6 +107,54 @@ export async function checkVisionAvailability(): Promise<boolean> {
 }
 
 /**
+ * Check OpenRouter API usage and limits
+ * Returns: { used: number, limit: number, remaining: number, isLimited: boolean }
+ */
+export async function checkApiUsage(): Promise<{
+  used: number;
+  limit: number;
+  remaining: number;
+  isLimited: boolean;
+  message: string;
+}> {
+  const provider = getAvailableProvider();
+  if (!provider) {
+    return { used: 0, limit: 0, remaining: 0, isLimited: false, message: 'No API key configured' };
+  }
+
+  try {
+    const response = await fetch('https://openrouter.ai/api/v1/key', {
+      headers: {
+        'Authorization': `Bearer ${provider.apiKey}`,
+      },
+    });
+
+    if (!response.ok) {
+      return { used: 0, limit: 50, remaining: 50, isLimited: false, message: 'Could not check usage' };
+    }
+
+    const data = await response.json();
+    const usage = data.data?.usage || 0;
+    const limit = data.data?.limit || 50;
+    const remaining = Math.max(0, limit - usage);
+    const isLimited = remaining === 0;
+
+    return {
+      used: usage,
+      limit: limit,
+      remaining: remaining,
+      isLimited: isLimited,
+      message: isLimited 
+        ? `Daily limit reached (${usage}/${limit}). Resets at midnight UTC.`
+        : `${remaining} requests remaining today (${usage}/${limit} used)`,
+    };
+  } catch (error) {
+    console.warn('⚠️ Could not check API usage');
+    return { used: 0, limit: 50, remaining: 50, isLimited: false, message: 'Could not check usage' };
+  }
+}
+
+/**
  * Recognize food from an image using Vision API
  */
 export async function recognizeFoodWithVision(
@@ -152,10 +207,11 @@ export async function recognizeFoodWithVision(
 
 /**
  * Recognize food using OpenAI-compatible chat API (OpenRouter)
+ * Tries multiple models in sequence until one works
  */
 async function recognizeWithChatAPI(
   base64: string, 
-  provider: { name: ProviderName; apiKey: string; config: ProviderConfig },
+  provider: { name: ProviderName; apiKey: string; config: any },
   options: VisionServiceOptions
 ): Promise<VisionFoodResult> {
   const headers: Record<string, string> = {
@@ -208,50 +264,121 @@ If you cannot identify the food, return:
   "isMultipleItems": false
 }`;
 
-  const response = await fetch(provider.config.url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      model: provider.config.model,
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'text', text: promptText },
-          { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64}` } },
-        ],
-      }],
-      temperature: 0.1,
-      max_tokens: options.maxTokens || 1000,
-    }),
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    console.error(`❌ ${provider.name} API error:`, response.status, errorData);
-    throw new Error(`Vision API error: ${response.status} - ${errorData.error?.message || 'Unknown error'}`);
-  }
-
-  const data = await response.json();
-  const content = data.choices?.[0]?.message?.content;
-
-  if (!content) {
-    throw new Error('No response from Vision API');
-  }
-
-  // Parse JSON from response (handle markdown code blocks)
-  let jsonStr = content;
-  const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (jsonMatch) {
-    jsonStr = jsonMatch[1];
-  } else {
-    const rawMatch = content.match(/\{[\s\S]*\}/);
-    if (rawMatch) {
-      jsonStr = rawMatch[0];
+  // Get list of models to try
+  const modelsToTry = provider.config.models || [provider.config.model];
+  
+  // If we have a last working model, try it first
+  if (lastWorkingModel && modelsToTry.includes(lastWorkingModel)) {
+    const idx = modelsToTry.indexOf(lastWorkingModel);
+    if (idx > 0) {
+      modelsToTry.splice(idx, 1);
+      modelsToTry.unshift(lastWorkingModel);
     }
   }
 
-  return JSON.parse(jsonStr);
+  let lastError: Error | null = null;
+  
+  // Try each model in sequence
+  for (const model of modelsToTry) {
+    console.log(`   Trying model: ${model}`);
+    
+    try {
+      const response = await fetch(provider.config.url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          model: model,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'text', text: promptText },
+              { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64}` } },
+            ],
+          }],
+          temperature: 0.1,
+          max_tokens: options.maxTokens || 1000,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const errorMsg = errorData.error?.message || '';
+        
+        // Check if this is a "no endpoints" error - try next model
+        if (errorMsg.includes('No endpoints found') || errorMsg.includes('not available')) {
+          console.log(`   ⚠️ ${model} not available, trying next...`);
+          continue;
+        }
+        
+        // Check for rate limiting
+        if (response.status === 429) {
+          if (errorMsg.includes('free-models-per-day')) {
+            throw new Error(
+              'Daily limit reached (50 free requests/day).\n\n' +
+              '💡 Options:\n' +
+              '• Wait until tomorrow (resets at midnight UTC)\n' +
+              '• Add $10 credits for 1000 requests/day\n' +
+              '• Use manual food search below'
+            );
+          }
+          // Provider rate limit - try next model
+          console.log(`   ⚠️ ${model} rate limited upstream, trying next...`);
+          continue;
+        }
+        
+        console.error(`❌ ${model} error:`, response.status, errorData);
+        lastError = new Error(`${model}: ${errorMsg || response.status}`);
+        continue;
+      }
+
+      const data = await response.json();
+      const content = data.choices?.[0]?.message?.content;
+
+      if (!content) {
+        console.log(`   ⚠️ ${model} returned empty response, trying next...`);
+        continue;
+      }
+
+      // Parse JSON from response
+      let jsonStr = content;
+      const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (jsonMatch) {
+        jsonStr = jsonMatch[1];
+      } else {
+        const rawMatch = content.match(/\{[\s\S]*\}/);
+        if (rawMatch) {
+          jsonStr = rawMatch[0];
+        }
+      }
+
+      const result = JSON.parse(jsonStr);
+      
+      // Success! Remember this model for next time
+      lastWorkingModel = model;
+      console.log(`   ✅ ${model} succeeded!`);
+      
+      return result;
+      
+    } catch (parseError: any) {
+      if (parseError.message.includes('Daily limit')) {
+        throw parseError; // Re-throw daily limit errors
+      }
+      console.log(`   ⚠️ ${model} failed: ${parseError.message}`);
+      lastError = parseError;
+    }
+  }
+
+  // All models failed
+  if (lastError) {
+    throw new Error(
+      'All Vision AI models temporarily unavailable.\n\n' +
+      '💡 Please use manual food search below.'
+    );
+  }
+  
+  throw new Error('Vision API error: No models available');
 }
+
 
 /**
  * Quick check if the image contains food
@@ -281,11 +408,14 @@ export async function isImageFood(imageUri: string): Promise<boolean> {
       'X-Title': 'Good Steward Food Scanner',
     };
 
+    // Use first available model or last working model
+    const modelToUse = lastWorkingModel || provider.config.models?.[0] || 'google/gemini-2.0-flash-exp:free';
+    
     const response = await fetch(provider.config.url, {
       method: 'POST',
       headers,
       body: JSON.stringify({
-        model: provider.config.modelFast,
+        model: modelToUse,
         messages: [{
           role: 'user',
           content: [
