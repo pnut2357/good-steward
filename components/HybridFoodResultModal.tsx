@@ -185,6 +185,16 @@ export default function HybridFoodResultModal({
               </View>
             )}
 
+            {/* Wrong prediction? Search for correct food */}
+            {result.success && onSearch && (
+              <Pressable style={styles.wrongFoodButton} onPress={onSearch}>
+                <MaterialIcons name="search" size={16} color="#E65100" />
+                <Text style={styles.wrongFoodText}>
+                  Not {result.productName}? Find correct food
+                </Text>
+              </Pressable>
+            )}
+
             {/* Multiple items breakdown */}
             {result.success && result.isMultipleItems && result.items && (
               <View style={styles.itemsSection}>
@@ -560,6 +570,23 @@ const styles = StyleSheet.create({
   methodText: {
     fontSize: 12,
     color: '#666',
+  },
+  wrongFoodButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    marginBottom: 12,
+    backgroundColor: '#FFF3E0',
+    borderRadius: 20,
+    alignSelf: 'center',
+  },
+  wrongFoodText: {
+    fontSize: 13,
+    color: '#E65100',
+    fontWeight: '500',
   },
   itemsSection: {
     backgroundColor: '#F5F5F5',
