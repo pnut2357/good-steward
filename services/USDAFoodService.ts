@@ -14,14 +14,17 @@ const USDA_API_KEY = process.env.EXPO_PUBLIC_USDA_API_KEY;
 const USDA_BASE_URL = 'https://api.nal.usda.gov/fdc/v1';
 
 // Nutrient IDs in USDA database
+// Note: Some foods use different Energy IDs depending on calculation method
 const NUTRIENT_IDS = {
-  ENERGY: 1008,      // Energy (kcal)
-  PROTEIN: 1003,     // Protein (g)
-  CARBS: 1005,       // Carbohydrates (g)
-  FAT: 1004,         // Total lipid/fat (g)
-  SUGAR: 2000,       // Total sugars (g)
-  SODIUM: 1093,      // Sodium (mg)
-  FIBER: 1079,       // Fiber (g)
+  ENERGY: 1008,           // Energy (kcal) - standard
+  ENERGY_ATWATER: 2047,   // Energy (Atwater General Factors) - some Foundation foods
+  ENERGY_ATWATER_SP: 2048,// Energy (Atwater Specific Factors) - alternative
+  PROTEIN: 1003,          // Protein (g)
+  CARBS: 1005,            // Carbohydrates (g)
+  FAT: 1004,              // Total lipid/fat (g)
+  SUGAR: 2000,            // Total sugars (g)
+  SODIUM: 1093,           // Sodium (mg)
+  FIBER: 1079,            // Fiber (g)
 };
 
 export interface USDAFoodResult {
@@ -97,7 +100,7 @@ export async function searchUSDAFoods(query: string, limit: number = 10): Promis
       fdcId: food.fdcId,
       name: cleanFoodName(food.description),
       brand: food.brandOwner || undefined,
-      calories: getNutrientValue(food, NUTRIENT_IDS.ENERGY),
+      calories: getEnergyValue(food),
       protein: getNutrientValue(food, NUTRIENT_IDS.PROTEIN),
       carbs: getNutrientValue(food, NUTRIENT_IDS.CARBS),
       fat: getNutrientValue(food, NUTRIENT_IDS.FAT),
@@ -119,15 +122,57 @@ export async function searchUSDAFoods(query: string, limit: number = 10): Promis
 
 /**
  * Get nutrient value from USDA food item
+ * 
+ * Note: USDA search API returns different structures:
+ * - Search: { nutrientId: 1008, value: 86 }
+ * - Details: { nutrient: { id: 1008 }, amount: 86 }
  */
 function getNutrientValue(food: any, nutrientId: number): number {
   if (!food.foodNutrients) return 0;
   
-  const nutrient = food.foodNutrients.find((n: any) => 
-    n.nutrientId === nutrientId || n.nutrientNumber === String(nutrientId)
-  );
+  const nutrient = food.foodNutrients.find((n: any) => {
+    // Search API format: { nutrientId: 1008, value: 86 }
+    if (n.nutrientId === nutrientId) return true;
+    
+    // Details API format: { nutrient: { id: 1008 }, amount: 86 }
+    if (n.nutrient && n.nutrient.id === nutrientId) return true;
+    
+    // Some responses use nutrientNumber (string)
+    if (n.nutrientNumber === String(nutrientId)) return true;
+    
+    return false;
+  });
   
-  return nutrient ? Math.round(nutrient.value * 10) / 10 : 0;
+  if (!nutrient) return 0;
+  
+  // Value can be in 'value' (search) or 'amount' (details)
+  const value = nutrient.value ?? nutrient.amount ?? 0;
+  return Math.round(value * 10) / 10;
+}
+
+/**
+ * Get energy/calories value from USDA food item
+ * 
+ * USDA uses different nutrient IDs for energy depending on the food:
+ * - 1008: Standard Energy (kcal) - most foods
+ * - 2047: Energy (Atwater General Factors) - Foundation foods
+ * - 2048: Energy (Atwater Specific Factors) - alternative calculation
+ */
+function getEnergyValue(food: any): number {
+  // Try standard energy first (most common)
+  let energy = getNutrientValue(food, NUTRIENT_IDS.ENERGY);
+  
+  // If not found, try Atwater General Factors (used by Foundation foods like raw vegetables)
+  if (energy === 0) {
+    energy = getNutrientValue(food, NUTRIENT_IDS.ENERGY_ATWATER);
+  }
+  
+  // If still not found, try Atwater Specific Factors
+  if (energy === 0) {
+    energy = getNutrientValue(food, NUTRIENT_IDS.ENERGY_ATWATER_SP);
+  }
+  
+  return energy;
 }
 
 /**
@@ -179,7 +224,7 @@ export async function getUSDAFoodDetails(fdcId: number): Promise<USDAFoodResult 
     return {
       fdcId: food.fdcId,
       name: cleanFoodName(food.description),
-      calories: getNutrientValue(food, NUTRIENT_IDS.ENERGY),
+      calories: getEnergyValue(food),
       protein: getNutrientValue(food, NUTRIENT_IDS.PROTEIN),
       carbs: getNutrientValue(food, NUTRIENT_IDS.CARBS),
       fat: getNutrientValue(food, NUTRIENT_IDS.FAT),
