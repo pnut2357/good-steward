@@ -4,7 +4,7 @@
     "slug": "good-steward",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/good-steward-logo.png",
     "scheme": "goodsteward",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -15,15 +15,17 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/emoji1.png",
-        "backgroundImage": "./assets/images/emoji2.png",
-        "monochromeImage": "./assets/images/emoji3.png"
+        "backgroundColor": "#4A9FB5",
+        "foregroundImage": "./assets/images/good-steward-logo.png"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.jaehyukchoi.goodsteward",
-      "versionCode": 1
+      "versionCode": 1,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "output": "static",
@@ -34,12 +36,13 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/good-steward-logo.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff",
           "dark": {
-            "backgroundColor": "#000000"
+            "image": "./assets/images/good-steward-logo.png",
+            "backgroundColor": "#1a1a1a"
           }
         }
       ],
@@ -63,6 +66,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "5e675e5c-f664-4c5b-984c-e71c006737ef"
+      }
     }
   }
 }
