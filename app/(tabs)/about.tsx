@@ -17,8 +17,30 @@ export default function AboutScreen() {
         />
         <Text style={styles.appName}>Good Steward</Text>
         <Text style={styles.tagline}>
-          Food product information at your fingertips
+          Honor God through mindful, healthy choices
         </Text>
+      </View>
+
+      {/* Mission Section */}
+      <View style={styles.missionSection}>
+        <View style={styles.sectionHeader}>
+          <MaterialIcons name="favorite" size={24} color="#8B4513" />
+          <Text style={styles.sectionTitle}>Our Mission</Text>
+        </View>
+        
+        <Text style={styles.missionText}>
+          Good Steward was built to help you honor God through mindful, healthy choices. 
+          We believe that caring for our physical health is an act of worship and stewardship.
+        </Text>
+        
+        <View style={styles.verseContainer}>
+          <Text style={styles.verseText}>
+            "Do you not know that your bodies are temples of the Holy Spirit, who is in you, 
+            whom you have received from God? You are not your own; you were bought at a price. 
+            Therefore honor God with your bodies."
+          </Text>
+          <Text style={styles.verseReference}>— 1 Corinthians 6:19-20</Text>
+        </View>
       </View>
 
       {/* Features Section */}
@@ -230,6 +252,39 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     marginTop: 4,
+  },
+  missionSection: {
+    padding: 20,
+    backgroundColor: '#FDF5E6',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E8DCC8',
+  },
+  missionText: {
+    fontSize: 16,
+    color: '#5D4037',
+    lineHeight: 24,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  verseContainer: {
+    backgroundColor: '#FFFFFF',
+    padding: 16,
+    borderRadius: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: '#8B4513',
+  },
+  verseText: {
+    fontSize: 14,
+    fontStyle: 'italic',
+    color: '#5D4037',
+    lineHeight: 22,
+  },
+  verseReference: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#8B4513',
+    marginTop: 8,
+    textAlign: 'right',
   },
   section: {
     padding: 20,
