@@ -23,9 +23,9 @@ export default function AboutScreen() {
 
       {/* Mission Section */}
       <View style={styles.missionSection}>
-        <View style={styles.sectionHeader}>
-          <MaterialIcons name="favorite" size={24} color="#8B4513" />
-          <Text style={styles.sectionTitle}>Our Mission</Text>
+        <View style={styles.missionHeader}>
+          <MaterialIcons name="favorite" size={24} color="#8E24AA" />
+          <Text style={styles.missionTitle}>Our Mission</Text>
         </View>
         
         <Text style={styles.missionText}>
@@ -39,7 +39,7 @@ export default function AboutScreen() {
             whom you have received from God? You are not your own; you were bought at a price. 
             Therefore honor God with your bodies."
           </Text>
-          <Text style={styles.verseReference}>— 1 Corinthians 6:19-20</Text>
+          <Text style={styles.verseRef}>— 1 Corinthians 6:19-20</Text>
         </View>
       </View>
 
@@ -255,34 +255,44 @@ const styles = StyleSheet.create({
   },
   missionSection: {
     padding: 20,
-    backgroundColor: '#FDF5E6',
+    backgroundColor: '#F3E5F5',
     borderBottomWidth: 1,
-    borderBottomColor: '#E8DCC8',
+    borderBottomColor: '#E1BEE7',
+  },
+  missionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  missionTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#6A1B9A',
+    marginLeft: 8,
   },
   missionText: {
-    fontSize: 16,
-    color: '#5D4037',
+    fontSize: 15,
+    color: '#4A148C',
     lineHeight: 24,
     marginBottom: 16,
-    textAlign: 'center',
   },
   verseContainer: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#fff',
     padding: 16,
     borderRadius: 12,
     borderLeftWidth: 4,
-    borderLeftColor: '#8B4513',
+    borderLeftColor: '#8E24AA',
   },
   verseText: {
     fontSize: 14,
-    fontStyle: 'italic',
-    color: '#5D4037',
+    color: '#555',
     lineHeight: 22,
+    fontStyle: 'italic',
   },
-  verseReference: {
+  verseRef: {
     fontSize: 13,
+    color: '#8E24AA',
     fontWeight: '600',
-    color: '#8B4513',
     marginTop: 8,
     textAlign: 'right',
   },
