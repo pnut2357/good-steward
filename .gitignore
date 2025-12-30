@@ -41,8 +41,8 @@ yarn-error.*
 app-example
 
 # generated native folders
-/ios
-/android
+# /ios
+# /android
 
 airflow_settings.yaml
 astro
@@ -188,3 +188,6 @@ dist
 .envs-looper
 coverage.json
 coverage.xml
+# Transformers.js model cache (downloaded at runtime)
+.transformers-cache/
+

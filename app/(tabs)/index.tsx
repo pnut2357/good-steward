@@ -1,4 +1,7 @@
-import ModeToggle from '@/components/ModeToggle';
+import FoodIdentifyOverlay from '@/components/FoodIdentifyOverlay';
+import FoodSearchModal, { FoodSearchResult } from '@/components/FoodSearchModal';
+import HybridFoodResultModal from '@/components/HybridFoodResultModal';
+import ModeToggle, { ScanMode } from '@/components/ModeToggle';
 import PhotoOverlay from '@/components/PhotoOverlay';
 import PortionModal from '@/components/PortionModal';
 import ResultModal from '@/components/ResultModal';
@@ -7,12 +10,15 @@ import SearchModal from '@/components/SearchModal';
 import { NutritionData, ScanResult } from '@/models/ScanResult';
 import { analysisService } from '@/services/AnalysisService';
 import { dbService } from '@/services/DatabaseService';
+import {
+  HybridFoodResult,
+  checkAvailableMethods,
+  recognizeFood
+} from '@/services/HybridFoodService';
 import { profileService } from '@/services/ProfileService';
 import { BarcodeScanningResult, CameraView, useCameraPermissions } from 'expo-camera';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, StyleSheet, Text, View } from 'react-native';
-
-type ScanMode = 'barcode' | 'photo';
 
 const BARCODE_TYPES = ['ean13', 'ean8', 'upc_a', 'upc_e'] as const;
 
@@ -36,26 +42,54 @@ export default function ScannerScreen() {
   const [failedBarcode, setFailedBarcode] = useState<string | undefined>();
   const [capturedPhotoUri, setCapturedPhotoUri] = useState<string | undefined>();
   
-  // Result state
+  // Result state (for barcode/photo modes)
   const [result, setResult] = useState<ScanResult | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
+  
+  // Food recognition state (for identify mode)
+  const [hybridResult, setHybridResult] = useState<HybridFoodResult | null>(null);
+  const [foodModalVisible, setFoodModalVisible] = useState(false);
+  const [identifyPhotoUri, setIdentifyPhotoUri] = useState<string | undefined>();
+  const [foodRecognitionAvailable, setFoodRecognitionAvailable] = useState(false);
+  const [availableMethods, setAvailableMethods] = useState<{
+    visionLLM: boolean;
+    tflite: boolean;
+    isOnline: boolean;
+  }>({ visionLLM: false, tflite: false, isOnline: false });
+  
+  // Food search modal state (fallback when AI recognition fails)
+  const [foodSearchModalVisible, setFoodSearchModalVisible] = useState(false);
   
   // Consumption state
   const [portionModalVisible, setPortionModalVisible] = useState(false);
   const [productToConsume, setProductToConsume] = useState<ScanResult | null>(null);
 
-  // Request permission and load profile on mount
+  // Load profile and check food recognition on mount (runs once)
   useEffect(() => {
-    // Request camera permission
-    if (permission && !permission.granted && permission.canAskAgain) {
-      requestPermission();
-    }
-    
     // Load user profile so filters work
     profileService.loadProfile().then(() => {
       console.log('✅ User profile loaded for filters');
     });
-  }, [permission]);
+    
+    // Check what food recognition methods are available
+    checkAvailableMethods().then(methods => {
+      setAvailableMethods(methods);
+      // Food recognition is available if either Vision LLM or TFLite works
+      const available = methods.visionLLM || methods.tflite;
+      setFoodRecognitionAvailable(available);
+      console.log(`🍽️ Food recognition available: ${available}`);
+      console.log(`   - Vision LLM: ${methods.visionLLM ? '✅' : '❌'}`);
+      console.log(`   - TFLite: ${methods.tflite ? '✅' : '❌'}`);
+      console.log(`   - Online: ${methods.isOnline ? '✅' : '❌'}`);
+    });
+  }, []); // Empty deps - run once on mount
+  
+  // Request camera permission (separate effect to avoid infinite loop)
+  useEffect(() => {
+    if (permission && !permission.granted && permission.canAskAgain) {
+      requestPermission();
+    }
+  }, [permission?.granted, permission?.canAskAgain]); // Only re-run when these specific values change
 
   /**
    * Handle barcode scan
@@ -105,58 +139,97 @@ export default function ScannerScreen() {
   }, [scanned, loading, mode]);
 
   /**
-   * Handle photo capture
-   * 
-   * Flow:
-   * 1. Take photo
-   * 2. Try OCR analysis
-   * 3. If OCR works → search → show result
-   * 4. If OCR fails → show search modal with photo reference
+   * Handle photo capture (for label scanning)
    */
   const handlePhotoCapture = useCallback(async () => {
     if (!cameraRef.current || loading) return;
     
-    console.log('📸 Capturing photo...');
+    console.log('📸 Capturing photo for label...');
     
     setLoading(true);
     setLoadingMessage('Taking photo...');
 
     try {
       const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.5,  // Lower quality = faster processing
-        skipProcessing: true,  // Skip post-processing for speed
+        quality: 0.5,
+        skipProcessing: true,
       });
       
       if (!photo?.uri) {
         throw new Error('Failed to capture photo');
       }
 
-      // Save photo URI for search modal reference
       setCapturedPhotoUri(photo.uri);
 
       setLoadingMessage('Analyzing label...');
       const scanResult = await analysisService.analyzePhoto(photo.uri);
       
       if (scanResult) {
-        // OCR worked and found a match!
         dbService.saveScan(scanResult);
         setResult(scanResult);
         setModalVisible(true);
       } else {
-        // OCR not available or no text found
-        // Show search modal so user can type what they see
         console.log('📱 OCR unavailable - showing manual search');
-        setFailedBarcode(undefined); // Clear any barcode
+        setFailedBarcode(undefined);
         setSearchModalVisible(true);
       }
     } catch (error: any) {
       console.error('Photo capture error:', error);
-      // Still show search modal on error - user can manually search
       setSearchModalVisible(true);
     } finally {
       setLoading(false);
     }
   }, [loading]);
+
+  /**
+   * Handle food identification capture
+   */
+  const handleIdentifyCapture = useCallback(async () => {
+    if (!cameraRef.current || loading) return;
+    
+    console.log('🍽️ Capturing photo for food identification...');
+    
+    setLoading(true);
+    setLoadingMessage('Taking photo...');
+
+    try {
+      const photo = await cameraRef.current.takePictureAsync({
+        quality: 0.7,
+        skipProcessing: false,
+      });
+      
+      if (!photo?.uri) {
+        throw new Error('Failed to capture photo');
+      }
+
+      setIdentifyPhotoUri(photo.uri);
+      
+      // Use hybrid service - tries Vision LLM first, falls back to TFLite
+      const loadingMsg = availableMethods.visionLLM 
+        ? 'AI is analyzing your food...' 
+        : 'Identifying food...';
+      setLoadingMessage(loadingMsg);
+
+      const recognitionResult = await recognizeFood(photo.uri);
+      
+      setHybridResult(recognitionResult);
+      setFoodModalVisible(true);
+      
+      if (!recognitionResult.success) {
+        // Result will show error in modal, but also offer manual search
+        console.log('⚠️ Recognition failed:', recognitionResult.error);
+      }
+    } catch (error: any) {
+      console.error('Identify capture error:', error);
+      Alert.alert(
+        'Error',
+        error.message || 'Failed to identify food. Please try again.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [loading, availableMethods.visionLLM]);
 
   /**
    * Close modal and reset
@@ -166,6 +239,192 @@ export default function ScannerScreen() {
     setResult(null);
     setTimeout(() => setScanned(false), 300);
   }, []);
+
+  /**
+   * Close food result modal
+   */
+  const handleCloseFoodModal = useCallback(() => {
+    setFoodModalVisible(false);
+    setHybridResult(null);
+    setIdentifyPhotoUri(undefined);
+  }, []);
+
+  /**
+   * Handle search fallback when food recognition fails
+   * Opens food name search (not barcode product search)
+   */
+  const handleFoodSearchFallback = useCallback(() => {
+    setFoodModalVisible(false);
+    setFoodSearchModalVisible(true);
+  }, []);
+
+  /**
+   * Handle food selection from food search modal
+   */
+  const handleFoodSearchSelect = useCallback((food: FoodSearchResult, servings: number) => {
+    const timestamp = new Date().toISOString();
+    const barcode = `food_${food.id}_${Date.now()}`;
+    
+    // Calculate nutrition for the servings
+    const multiplier = (food.servingG / 100) * servings;
+    const calories = Math.round(food.calories * multiplier);
+    const protein = Math.round(food.protein * multiplier * 10) / 10;
+    const carbs = Math.round(food.carbs * multiplier * 10) / 10;
+    const fat = Math.round(food.fat * multiplier * 10) / 10;
+    
+    const foodResult: ScanResult = {
+      barcode,
+      name: food.name,
+      ingredients: '',
+      summary: `${servings} serving${servings !== 1 ? 's' : ''} (${Math.round(food.servingG * servings)}g)`,
+      isSafe: true,
+      nutrition: {
+        calories_100g: food.calories,
+        protein_100g: food.protein,
+        carbs_100g: food.carbs,
+        fat_100g: food.fat,
+        serving_size_g: food.servingG,
+      },
+      dataSource: 'food_search',
+      source: 'photo',
+      photoUri: identifyPhotoUri,
+      consumed: true,
+      timestamp,
+    };
+    
+    try {
+      // Save to database
+      dbService.saveScan(foodResult);
+      // Add consumption for the specified serving size
+      dbService.addConsumption(barcode, Math.round(food.servingG * servings));
+      
+      console.log(`✅ Saved food search: ${food.name} (${servings} servings = ${calories} kcal)`);
+      
+      // Close modals
+      setFoodSearchModalVisible(false);
+      setHybridResult(null);
+      setIdentifyPhotoUri(undefined);
+      
+      // Show confirmation
+      Alert.alert(
+        'Added to Log',
+        `${food.name} (${calories} kcal) has been added to your consumption log.`,
+        [{ text: 'OK' }]
+      );
+    } catch (error: any) {
+      console.error('Failed to save food search selection:', error);
+      Alert.alert('Error', 'Failed to save. Please try again.');
+    }
+  }, [identifyPhotoUri]);
+
+  /**
+   * Handle manual calorie entry when food recognition fails
+   */
+  const handleManualCalorieEntry = useCallback((calories: number, name?: string) => {
+    const timestamp = new Date().toISOString();
+    const barcode = `manual_${Date.now()}`;
+    
+    const manualResult: ScanResult = {
+      barcode,
+      name: name || 'Unknown Food',
+      ingredients: '', // Manual entry has no ingredients
+      summary: `Manually entered: ${calories} kcal`,
+      isSafe: true, // Deprecated but required
+      nutrition: {
+        calories_100g: calories, // Store as per-serving since we don't know weight
+      },
+      dataSource: 'manual',
+      source: 'photo',
+      photoUri: identifyPhotoUri,
+      consumed: true,
+      timestamp,
+    };
+    
+    try {
+      // Save to database
+      dbService.saveScan(manualResult);
+      // Also add consumption record for today
+      dbService.addConsumption(barcode, 100); // 100g = full serving
+      
+      console.log('✅ Saved manual entry:', manualResult.name, calories, 'kcal');
+      
+      // Close modal
+      setFoodModalVisible(false);
+      setHybridResult(null);
+      setIdentifyPhotoUri(undefined);
+      
+      // Show confirmation
+      Alert.alert(
+        'Added to Log',
+        `${manualResult.name} (${calories} kcal) has been added to your consumption log.`,
+        [{ text: 'OK' }]
+      );
+    } catch (error: any) {
+      console.error('Failed to save manual entry:', error);
+      Alert.alert('Error', 'Failed to save. Please try again.');
+    }
+  }, [identifyPhotoUri]);
+
+  /**
+   * Handle logging identified food from hybrid result
+   */
+  const handleLogHybridFood = useCallback((result: HybridFoodResult, portionMultiplier: number) => {
+    if (!result.success) return;
+
+    // Create a ScanResult-like object for the identified food
+    const timestamp = new Date().toISOString();
+    const barcode = `ai_${result.method}_${Date.now()}`;
+    
+    // Calculate adjusted nutrition
+    const adjustedCalories = Math.round((result.calories || 0) * portionMultiplier);
+    const adjustedProtein = Math.round((result.protein || 0) * portionMultiplier * 10) / 10;
+    const adjustedCarbs = Math.round((result.carbs || 0) * portionMultiplier * 10) / 10;
+    const adjustedFat = Math.round((result.fat || 0) * portionMultiplier * 10) / 10;
+    const adjustedSugar = result.sugar ? Math.round(result.sugar * portionMultiplier * 10) / 10 : undefined;
+    const portionGrams = Math.round((result.servingGrams || 100) * portionMultiplier);
+    
+    // Save as consumed directly
+    const scanResult: ScanResult = {
+      barcode,
+      name: result.productName,
+      ingredients: result.isMultipleItems 
+        ? `Mixed plate: ${result.items?.map(i => i.name).join(', ')}`
+        : 'AI-identified food',
+      isSafe: true, // deprecated but required
+      timestamp,
+      summary: `AI-identified: ${result.productName}`,
+      nutrition: {
+        calories_100g: result.servingGrams && result.servingGrams > 0 
+          ? Math.round((result.calories || 0) * 100 / result.servingGrams)
+          : result.calories,
+        protein_100g: result.servingGrams && result.servingGrams > 0
+          ? Math.round((result.protein || 0) * 100 / result.servingGrams * 10) / 10
+          : result.protein,
+        carbs_100g: result.servingGrams && result.servingGrams > 0
+          ? Math.round((result.carbs || 0) * 100 / result.servingGrams * 10) / 10
+          : result.carbs,
+        fat_100g: result.servingGrams && result.servingGrams > 0
+          ? Math.round((result.fat || 0) * 100 / result.servingGrams * 10) / 10
+          : result.fat,
+        sugar_100g: result.sugar,
+        serving_size_g: result.servingGrams,
+      },
+      dataSource: result.method === 'vision_llm' ? 'AI Vision (Llama 3.2)' : 'Food-101 AI',
+      source: 'photo',
+      consumed: true,
+    };
+
+    dbService.saveScan(scanResult);
+    dbService.addConsumption(barcode, portionGrams);
+
+    Alert.alert(
+      '✅ Added to Log',
+      `${result.productName} (${adjustedCalories} kcal) added to today's intake.`,
+      [{ text: 'OK' }]
+    );
+
+    handleCloseFoodModal();
+  }, [handleCloseFoodModal]);
 
   /**
    * Handle "I Ate This" button from result modal
@@ -208,7 +467,6 @@ export default function ScannerScreen() {
   const handleEditNutrition = useCallback((barcode: string, nutrition: NutritionData) => {
     dbService.updateNutrition(barcode, nutrition);
     
-    // Update the current result if it's the same product
     if (result && result.barcode === barcode) {
       setResult({ ...result, nutrition: { ...result.nutrition, ...nutrition } });
     }
@@ -244,7 +502,6 @@ export default function ScannerScreen() {
     setLoadingMessage('Getting product info...');
 
     try {
-      // Try to fetch the selected product
       const scanResult = await analysisService.analyzeBarcode(barcode);
       
       if (scanResult) {
@@ -319,10 +576,16 @@ export default function ScannerScreen() {
       />
 
       {/* Mode-specific overlay */}
-      {mode === 'barcode' ? (
-        <ScannerOverlay />
-      ) : (
-        <PhotoOverlay onCapture={handlePhotoCapture} disabled={loading} />
+      {mode === 'barcode' && <ScannerOverlay />}
+      {mode === 'photo' && <PhotoOverlay onCapture={handlePhotoCapture} disabled={loading} />}
+      {mode === 'identify' && (
+        <FoodIdentifyOverlay 
+          onCapture={handleIdentifyCapture} 
+          disabled={loading}
+          isAvailable={foodRecognitionAvailable}
+          isOnline={availableMethods.isOnline}
+          hasVisionLLM={availableMethods.visionLLM}
+        />
       )}
 
       {/* Mode toggle (top) */}
@@ -337,7 +600,9 @@ export default function ScannerScreen() {
             <ActivityIndicator size="large" color="#2E7D32" />
             <Text style={styles.loadingText}>{loadingMessage}</Text>
             <Text style={styles.loadingSubtext}>
-              Results are cached for instant future access
+              {mode === 'identify' 
+                ? 'AI is analyzing your food...'
+                : 'Results are cached for instant future access'}
             </Text>
           </View>
         </View>
@@ -352,13 +617,35 @@ export default function ScannerScreen() {
         </View>
       )}
 
-      {/* Result Modal */}
+      {/* Result Modal (for barcode/photo) */}
       <ResultModal
         visible={modalVisible}
         result={result}
         onClose={handleCloseModal}
         onConsume={handleConsumePress}
         onEditNutrition={handleEditNutrition}
+      />
+
+      {/* Food Result Modal (for identify) */}
+      <HybridFoodResultModal
+        visible={foodModalVisible}
+        result={hybridResult}
+        photoUri={identifyPhotoUri}
+        onClose={handleCloseFoodModal}
+        onLog={handleLogHybridFood}
+        onSearch={handleFoodSearchFallback}
+        onManualEntry={handleManualCalorieEntry}
+      />
+
+      {/* Food Search Modal (fallback when AI fails) */}
+      <FoodSearchModal
+        visible={foodSearchModalVisible}
+        photoUri={identifyPhotoUri}
+        onClose={() => {
+          setFoodSearchModalVisible(false);
+          setIdentifyPhotoUri(undefined);
+        }}
+        onSelect={handleFoodSearchSelect}
       />
 
       {/* Portion Selection Modal */}
@@ -369,7 +656,7 @@ export default function ScannerScreen() {
         onConfirm={handleConfirmConsumption}
       />
 
-      {/* Search Modal (when barcode not found or photo OCR fails) */}
+      {/* Search Modal */}
       <SearchModal
         visible={searchModalVisible}
         onClose={handleSearchClose}

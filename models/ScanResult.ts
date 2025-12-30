@@ -18,6 +18,8 @@ export interface NutritionData {
   sugar_100g?: number;
   /** Salt in grams per 100g */
   salt_100g?: number;
+  /** Total fat in grams per 100g */
+  fat_100g?: number;
   /** Saturated fat in grams per 100g */
   saturated_fat_100g?: number;
   /** Calories per 100g */

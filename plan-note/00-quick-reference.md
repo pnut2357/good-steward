@@ -1,7 +1,7 @@
 # Good Steward - Quick Reference
 
-> **Last Updated**: December 21, 2024  
-> **App Version**: 3.0
+> **Last Updated**: December 29, 2024  
+> **App Version**: 4.1 (FREE Vision APIs)
 
 ---
 
@@ -37,11 +37,65 @@ These documents describe features that are **already implemented**:
 | 22 | `22-filter-mode-reference.md` | Filter modes | ✅ Done |
 | 23 | `23-nutrition-label-scanner.md` | Nutrition label OCR | ✅ Done |
 
-### 📋 PLANNED (Future Development)
+### Phase 4A: TFLite Food Recognition ✅ COMPLETE
 
 | Doc # | File | Description | Status |
 |-------|------|-------------|--------|
-| 24 | `24-real-food-recognition.md` | AI food identification | 📋 Planned (v2.0) |
+| 24 | `24-real-food-recognition.md` | AI food identification | ✅ Phase 4A Done |
+
+```
+📸 Photo of pizza → 🧠 TFLite Model (on-device) → 🍕 "Pizza" → 📊 266 kcal
+
+✅ FREE forever (no API costs)
+✅ Works offline
+✅ 50-200ms inference
+✅ 101 food categories with nutrition data
+⚠️ Requires dev build (npx expo run:ios)
+```
+
+**Files Created:**
+- `data/food101Labels.ts` - 101 food category labels
+- `data/food101Nutrition.ts` - Nutrition data for all 101 foods
+- `services/FoodRecognitionService.ts` - TFLite model inference
+- `components/FoodIdentifyOverlay.tsx` - Identify mode UI
+- `components/FoodResultModal.tsx` - Show identified food
+- `assets/models/food_v1.tflite` - TFLite model (21MB)
+
+### Phase 4B: FREE Vision APIs ✅ IMPLEMENTED
+
+**Solution: HuggingFace BLIP (100% FREE)**
+```
+📸 Mixed plate → 🤖 BLIP → 🍕 Pizza + 🍟 Fries → 📊 ~600 kcal
+
+✅ Unlimited food categories
+✅ Mixed plate support
+✅ Works in Expo Go!
+✅ 100% FREE (no credit card)
+✅ ~1-3 second response
+❌ Requires internet
+```
+
+**Files Created:**
+- `services/VisionFoodService.ts` - HuggingFace + OpenRouter
+- `services/HybridFoodService.ts` - Vision + TFLite fallback
+- `components/HybridFoodResultModal.tsx` - Display results
+
+**See:** [26-vision-api-strategy.md](./26-vision-api-strategy.md) for full details
+
+---
+
+### 🚀 Deployment
+
+| Doc # | File | Description |
+|-------|------|-------------|
+| 25 | `25-deployment-checklist.md` | Testing & deployment guide |
+
+**Quick Costs:**
+- Google Play: $25 one-time
+- Apple App Store: $99/year (wait for validation)
+- APIs: $0 (all free tiers)
+
+**API Usage Tracking:** `services/ApiUsageTracker.ts`
 
 ### 📄 MASTER DOCUMENTS
 
@@ -77,7 +131,8 @@ Phase 1 = Core Features (docs 01-11) .......... ✅ COMPLETE
 Phase 2 = User Filters & Legal (docs 17-20) ... ✅ COMPLETE
 Phase 3 = Consumption Tracking (doc 21) ....... ✅ COMPLETE
 Phase 3.5 = Nutrition Label Scanner (doc 23) .. ✅ COMPLETE
-Phase 4 = Real Food Recognition (doc 24) ...... 📋 PLANNED
+Phase 4A = TFLite Food-101 (doc 24) ........... ✅ COMPLETE
+Phase 4B = Vision LLM Upgrade (doc 24) ........ 📋 PLANNED
 Phase 5 = Future Enhancements ................. 📋 PLANNED
 ```
 
@@ -113,7 +168,12 @@ npx expo start --clear
 
 ```bash
 # .env
-EXPO_PUBLIC_GROQ_API_KEY=gsk_xxxxx  # Optional - for AI text summaries
+
+# Vision - OpenRouter (FREE, reliable)
+EXPO_PUBLIC_OPENROUTER_API_KEY=sk-or-xxxxx
+
+# Text AI (optional)
+# EXPO_PUBLIC_GROQ_API_KEY=gsk_xxxxx
 ```
 
 ---
@@ -128,4 +188,18 @@ EXPO_PUBLIC_GROQ_API_KEY=gsk_xxxxx  # Optional - for AI text summaries
 | User health filters | ✅ | Diabetes, pregnancy, allergies |
 | Consumption tracking | ✅ | "I Ate This" + portions |
 | Statistics (7/30/90 days) | ✅ | Daily averages + trends |
-| Real food recognition | 📋 | Planned for v2.0 |
+| Real food recognition (TFLite) | ✅ | 101 categories, offline, dev build only |
+| Vision API (mixed plates) | ✅ | Uses OpenRouter (Free Tier) |
+
+---
+
+## 🤖 FREE Vision API Options
+
+| Priority | Provider | Model | Cost |
+|----------|----------|-------|------|
+| 1️⃣ | **OpenRouter** | Llama 3.2 Vision | **FREE tier** |
+| 2️⃣ | **TFLite** | Food-101 | **FREE** (offline) |
+
+**Recommended:** OpenRouter (fast, reliable, free)
+
+**Get FREE Key:** https://openrouter.ai

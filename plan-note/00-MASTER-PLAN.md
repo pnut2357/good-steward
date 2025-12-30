@@ -1,8 +1,8 @@
 # Good Steward - Master Plan
 
-> **Last Updated**: December 21, 2024  
-> **Status**: Phase 3 Complete, Phase 4 In Progress  
-> **Version**: 3.0 (Consumption Tracking & Nutrition Scanner Complete)
+> **Last Updated**: December 25, 2024  
+> **Status**: Phase 4 Complete (Vision LLM + TFLite Hybrid)  
+> **Version**: 4.0 (Real Food Recognition with Vision LLM)
 
 ---
 
@@ -199,6 +199,26 @@ good-steward/
 | OCR Service (ML Kit + OCR.space) | ✅ | services/OCRService.ts |
 | Expo SDK 54 File API | ✅ | Using `new File().base64()` |
 
+### ✅ Phase 4A: TFLite Food Recognition (COMPLETE)
+| Component | Status | File |
+|-----------|--------|------|
+| TFLite model (21MB) | ✅ | assets/models/food_v1.tflite |
+| FoodRecognitionService | ✅ | services/FoodRecognitionService.ts |
+| Food-101 labels | ✅ | data/food101Labels.ts |
+| Food-101 nutrition | ✅ | data/food101Nutrition.ts |
+| FoodIdentifyOverlay | ✅ | components/FoodIdentifyOverlay.tsx |
+| FoodResultModal | ✅ | components/FoodResultModal.tsx |
+| "Identify" mode in scanner | ✅ | app/(tabs)/index.tsx |
+
+### ✅ Phase 4B: Vision LLM Upgrade (COMPLETE)
+| Component | Status | File |
+|-----------|--------|------|
+| VisionFoodService | ✅ | services/VisionFoodService.ts |
+| HybridFoodService | ✅ | services/HybridFoodService.ts |
+| Mixed plate modal | ✅ | components/HybridFoodResultModal.tsx |
+| Groq Vision integration | ✅ | Uses Llama 3.2 Vision |
+| Updated Identify overlay | ✅ | components/FoodIdentifyOverlay.tsx |
+
 ---
 
 ## 4. Completed Features
@@ -250,50 +270,78 @@ When product is found but nutrition data is missing:
 
 ---
 
-## 5. Phase 4: Real Food Recognition (Planned)
+## 5. Phase 4: Real Food Recognition
 
-### The Problem
-Currently works for **packaged products** (barcode/label scanning). Users also need to analyze **real/unpackaged food** like:
-- Homemade meals
-- Restaurant dishes  
-- Fresh fruits/vegetables
-- Prepared foods without packaging
+### Current Status
 
-### Recommended Approach: On-Device TensorFlow Lite
-**Cost: FREE | Latency: ~50-200ms | Offline: YES**
+#### Phase 4A: TFLite Food-101 ✅ COMPLETE
+| Component | Status | File |
+|-----------|--------|------|
+| TFLite model (21MB) | ✅ | `assets/models/food_v1.tflite` |
+| FoodRecognitionService | ✅ | `services/FoodRecognitionService.ts` |
+| Food-101 nutrition database | ✅ | `data/food101Nutrition.ts` |
+| "Identify" mode UI | ✅ | `components/FoodIdentifyOverlay.tsx` |
 
+**Limitations of Food-101:**
+- ❌ Only 101 fixed food categories (2014 dataset)
+- ❌ Can't identify mixed plates (burger + fries)
+- ❌ No portion estimation
+- ❌ Requires Development Build (not Expo Go)
+
+#### Phase 4B: Vision LLM Upgrade 📋 PLANNED
+Modern Vision LLMs (2025) can recognize **any food**, handle **mixed plates**, and **estimate portions**.
+
+### Solution Options (2025)
+| Approach | Cost | Speed | Offline | Accuracy | Mixed Plates | Expo Go |
+|----------|------|-------|---------|----------|--------------|---------|
+| **TFLite Food-101** (current) | FREE | 50-200ms | ✅ Yes | Limited (101) | ❌ No | ❌ No |
+| **Vision LLM** (proposed) | FREE tier | 300-800ms | ❌ No | Excellent | ✅ Yes | ✅ Yes |
+| **Hybrid** ⭐ (recommended) | FREE | Best of both | ✅ Fallback | Excellent | ✅ Yes | ✅ Yes |
+
+### Recommended: Hybrid Architecture
 ```
-📸 Photo of food
-       ↓
-🧠 TFLite Food-101 Model (on-device)
-       ↓
-🍕 "Pizza" (92% confidence)
-       ↓
-📊 Lookup nutrition → ~266 kcal/100g
+┌─────────────────────────────────────────────────────────────────┐
+│                 FOOD RECOGNITION FLOW (v2.0)                     │
+├─────────────────────────────────────────────────────────────────┤
+│  📸 User takes photo                                             │
+│         │                                                        │
+│     ┌───┴───┐                                                   │
+│   Online   Offline                                               │
+│     │         │                                                  │
+│     ▼         ▼                                                  │
+│  Vision    TFLite                                                │
+│   LLM     (fallback)                                             │
+│     │         │                                                  │
+│     └────┬────┘                                                 │
+│          ▼                                                       │
+│  🍕 Pizza + 🍟 Fries + 🥗 Salad                                  │
+│  Total: ~850 kcal                                                │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-### Key Dependencies
-```json
-{
-  "react-native-fast-tflite": "^1.5.0",
-  "react-native-vision-camera": "^4.0.0"
-}
-```
+### Best Free Vision LLMs (2025)
+Source: [Koyeb Blog](https://www.koyeb.com/blog/best-multimodal-vision-models-in-2025)
 
-### Reference Projects
-| Project | Approach | Link |
-|---------|----------|------|
-| **Food101** | React Native + CoreML | [GantMan/Food101](https://github.com/GantMan/Food101) |
-| **FoodCalorieEstimation** | Python + Azure | [virajmane/FoodCalorieEstimation](https://github.com/virajmane/FoodCalorieEstimation) |
-| **react-native-fast-tflite** | TFLite for RN | [mrousavy/react-native-fast-tflite](https://github.com/mrousavy/react-native-fast-tflite) |
+| Model | Provider | Free Tier | Best For |
+|-------|----------|-----------|----------|
+| **Llama 3.2 Vision 90B** | Groq | ✅ ~14,400 req/day | Best accuracy |
+| **Llama 3.2 Vision 11B** | Groq | ✅ ~14,400 req/day | Fast, mobile |
+| **Qwen 2.5 VL 7B** | Together.ai | ✅ Free tier | Detailed analysis |
+| **Gemma 3 4B** | Google | ✅ Free tier | Fast, 140+ languages |
+| **Phi-4 Multimodal** | Microsoft | ✅ MIT license | Low latency |
 
-### Files to Create
-- `services/FoodRecognitionService.ts` - TFLite model inference
-- `data/food101Nutrition.ts` - Pre-computed nutrition for 101 foods
-- `components/FoodIdentifyOverlay.tsx` - Real-time recognition UI
-- `assets/models/food_v1.tflite` - TensorFlow Lite model (~5MB)
+### Phase 4B: FREE Vision APIs ✅ IMPLEMENTED
+| Task | Status |
+|------|--------|
+| Get HuggingFace token (FREE) | ✅ User action |
+| Create VisionFoodService.ts | ✅ Done |
+| Create HybridFoodService.ts | ✅ Done |
+| Update scanner for mixed plates | ✅ Done |
+| Add BLIP caption parsing | ✅ Done |
 
-**See**: [24-real-food-recognition.md](./24-real-food-recognition.md) for full details.
+**See**: 
+- [24-real-food-recognition.md](./24-real-food-recognition.md) - Full implementation
+- [26-vision-api-strategy.md](./26-vision-api-strategy.md) - FREE API strategy
 
 ---
 
@@ -313,25 +361,42 @@ Currently works for **packaged products** (barcode/label scanning). Users also n
 
 ## 7. Free API Resources
 
-### Active APIs (In Use)
+### Active APIs (In Use) - ALL FREE
 | API | Purpose | Cost | Limits |
 |-----|---------|------|--------|
-| **OpenFoodFacts** | Barcode → Product data | FREE | Unlimited |
-| **USDA FoodData Central** | US product backup | FREE | 3,600/hour |
-| **OCR.space** | Cloud OCR for labels | FREE | 25,000/month |
-| **Groq** | AI text summaries | FREE | 30 req/min |
-| **SQLite** | Local caching | FREE | Unlimited |
+| **OpenRouter** ⭐ | AI Vision (Llama) | **FREE tier** | Rate limited |
+| **OpenFoodFacts** | Barcode → Product data | **FREE** | Unlimited |
+| **USDA FoodData Central** | US product backup | **FREE** | 3,600/hour |
+| **OCR.space** | Cloud OCR for labels | **FREE** | 25,000/month |
+| **SQLite** | Local caching | **FREE** | Unlimited |
 
 ### On-Device (Development Build Only)
 | Service | Purpose | Cost |
 |---------|---------|------|
 | **ML Kit OCR** | On-device text recognition | FREE |
+| **TFLite Food-101** | On-device food recognition (101 categories) | FREE |
+
+### Vision API Priority (All FREE)
+| Priority | Provider | Model | Notes |
+|----------|----------|-------|-------|
+| 1️⃣ | **OpenRouter** | Llama 3.2 11B | Free tier, high accuracy |
+| 2️⃣ | **TFLite** | Food-101 | Offline fallback (dev build only) |
+
+### Best Open Source Vision Models (2025)
+Source: [Koyeb Blog](https://www.koyeb.com/blog/best-multimodal-vision-models-in-2025)
+
+| Model | Developer | Size | License |
+|-------|-----------|------|---------|
+| **Llama 3.2 Vision** | Meta | 11B-90B | Llama License |
+| **Gemma 3** | Google | 4B-27B | Open weights |
+| **Qwen 2.5 VL** | Alibaba | 7B-72B | Apache 2.0 |
 
 ### Removed/Deprecated
 | API | Reason |
 |-----|--------|
-| Hugging Face Vision | 410 Gone - models deprecated |
-| Groq Vision | Models decommissioned (Dec 2024) |
+| Hugging Face Serverless | **Unreliable** (404/410 errors) for free vision |
+| Groq Vision | **Decommissioned** (Dec 2024) |
+| Together.ai | Requires payment for vision models |
 
 ### API Endpoints
 ```typescript
@@ -468,7 +533,9 @@ npx expo start --clear
 | 21 | 21-consumption-tracking.md | Consumption tracking |
 | 22 | 22-filter-mode-reference.md | Filter mode details |
 | 23 | 23-nutrition-label-scanner.md | Scan nutrition labels with OCR |
-| 24 | 24-real-food-recognition.md | **Phase 4**: Real food recognition (planned) |
+| 24 | 24-real-food-recognition.md | **Phase 4**: Real food recognition |
+| 25 | 25-deployment-checklist.md | Testing & deployment guide |
+| 26 | 26-vision-api-strategy.md | **FREE** Vision API strategy |
 
 ### Source Files
 | Category | Files |
@@ -483,6 +550,23 @@ npx expo start --clear
 ---
 
 ## Changelog
+
+### v4.1 (December 29, 2024)
+- ✅ Switched to **100% FREE** Vision APIs
+- ✅ HuggingFace BLIP as primary (no credit card required)
+- ✅ OpenRouter as backup (free tier)
+- ✅ Removed Together.ai (requires payment)
+- ✅ Removed Groq Vision (decommissioned)
+- ✅ Added 26-vision-api-strategy.md
+
+### v4.0 (December 25, 2024)
+- ✅ Phase 4A: TFLite Food-101 on-device recognition (101 categories)
+- ✅ Phase 4B: Vision LLM upgrade (unlimited foods, mixed plates)
+- ✅ Hybrid architecture (Vision LLM primary + TFLite offline fallback)
+- ✅ VisionFoodService.ts - Vision API integration
+- ✅ HybridFoodService.ts - Combines Vision + TFLite
+- ✅ HybridFoodResultModal.tsx - Displays mixed plate results
+- ✅ Updated FoodIdentifyOverlay - Shows which AI method will be used
 
 ### v3.0 (December 21, 2024)
 - ✅ Consumption tracking with "I Ate This" button
