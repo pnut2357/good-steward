@@ -22,6 +22,7 @@
       "predictiveBackGestureEnabled": false,
       "package": "com.jaehyukchoi.goodsteward",
       "versionCode": 1,
+      "minSdkVersion": 26,
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO"
