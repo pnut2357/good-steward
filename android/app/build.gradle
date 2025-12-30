@@ -87,9 +87,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'com.anonymous.goodsteward'
+    namespace 'com.jaehyukchoi.goodsteward'
     defaultConfig {
-        applicationId 'com.anonymous.goodsteward'
+        applicationId 'com.jaehyukchoi.goodsteward'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

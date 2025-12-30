@@ -1,4 +1,4 @@
-package com.anonymous.goodsteward
+package com.jaehyukchoi.goodsteward
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build

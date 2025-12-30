@@ -1,4 +1,4 @@
-package com.anonymous.goodsteward
+package com.jaehyukchoi.goodsteward
 
 import android.app.Application
 import android.content.res.Configuration
