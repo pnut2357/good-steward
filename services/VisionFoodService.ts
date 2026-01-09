@@ -223,12 +223,18 @@ async function recognizeWithChatAPI(
     'X-Title': 'Good Steward Food Scanner',
   };
 
-  const promptText = `You are a nutrition expert. Analyze this food photo and identify ALL food items visible.
+  const promptText = `You are a nutrition expert with knowledge of INTERNATIONAL cuisines. Analyze this food photo and identify ALL food items visible.
 
-For each item, estimate:
-- Name (be specific, e.g., "Pepperoni Pizza" not just "Pizza")
+IMPORTANT: Recognize foods from ALL cuisines including:
+- Korean (e.g., 탕수육/Tangsuyuk, 비빔밥/Bibimbap, 김치/Kimchi, 불고기/Bulgogi)
+- Chinese (e.g., Kung Pao Chicken, Dumplings, Fried Rice)
+- Japanese (e.g., Sushi, Ramen, Tempura)
+- Thai, Vietnamese, Indian, Middle Eastern, etc.
+
+For each item, provide:
+- Name (be VERY specific, include cuisine type if not obvious, e.g., "Korean Sweet and Sour Pork (Tangsuyuk)" not just "Fried Pork")
 - Calories, protein, carbs, fat (in grams)
-- Portion size in grams and description (e.g., "1 medium slice")
+- Portion size in grams and description (e.g., "1 medium serving, ~250g")
 
 Return ONLY valid JSON in this exact format:
 {

@@ -32,6 +32,7 @@ import {
 import { UserProfile } from '../models/UserProfile';
 import { profileService } from '../services/ProfileService';
 import { isUSDAAvailable, searchUSDAFoods, USDAFoodResult } from '../services/USDAFoodService';
+import { hasKoreanCharacters, translateKoreanFood, getSearchTermsForKorean } from '../data/koreanFoodMap';
 
 // Common foods with pre-defined nutrition (per 100g)
 // Includes international foods for instant offline search
@@ -147,13 +148,21 @@ const COMMON_FOODS: FoodSearchResult[] = [
   { id: 'banh_mi', name: 'Banh Mi (Vietnamese Sandwich)', calories: 364, protein: 16, carbs: 44, fat: 14, sugar: 6, sodium: 920, serving: '1 sandwich (280g)', servingG: 280 },
   { id: 'spring_roll_fresh', name: 'Fresh Spring Rolls (Vietnamese)', calories: 89, protein: 4, carbs: 13, fat: 2, sugar: 2, sodium: 260, serving: '2 rolls (130g)', servingG: 130 },
   
-  // Asian - Korean
-  { id: 'bibimbap', name: 'Bibimbap', calories: 140, protein: 7, carbs: 22, fat: 3, sugar: 3, sodium: 420, serving: '1 bowl (420g)', servingG: 420 },
-  { id: 'bulgogi', name: 'Bulgogi (Korean BBQ beef)', calories: 200, protein: 17, carbs: 10, fat: 11, sugar: 8, sodium: 580, serving: '1 serving (150g)', servingG: 150 },
-  { id: 'kimchi', name: 'Kimchi', calories: 23, protein: 1, carbs: 4, fat: 0, sugar: 2, sodium: 670, serving: '1/2 cup (75g)', servingG: 75 },
-  { id: 'korean_fried_chicken', name: 'Korean Fried Chicken', calories: 285, protein: 22, carbs: 12, fat: 17, sugar: 5, sodium: 750, serving: '4 pieces (200g)', servingG: 200 },
-  { id: 'japchae', name: 'Japchae (Korean Noodles)', calories: 144, protein: 4, carbs: 24, fat: 4, sugar: 6, sodium: 420, serving: '1 cup (200g)', servingG: 200 },
-  { id: 'kimbap', name: 'Kimbap (Korean Sushi)', calories: 160, protein: 5, carbs: 28, fat: 3, sugar: 4, sodium: 380, serving: '4 pieces (140g)', servingG: 140 },
+  // Asian - Korean (한식)
+  { id: 'tangsuyuk', name: 'Sweet and Sour Pork (탕수육)', calories: 265, protein: 15, carbs: 28, fat: 11, sugar: 18, sodium: 520, serving: '1 serving (250g)', servingG: 250 },
+  { id: 'bibimbap', name: 'Bibimbap (비빔밥)', calories: 140, protein: 7, carbs: 22, fat: 3, sugar: 3, sodium: 420, serving: '1 bowl (420g)', servingG: 420 },
+  { id: 'bulgogi', name: 'Bulgogi (불고기)', calories: 200, protein: 17, carbs: 10, fat: 11, sugar: 8, sodium: 580, serving: '1 serving (150g)', servingG: 150 },
+  { id: 'kimchi', name: 'Kimchi (김치)', calories: 23, protein: 1, carbs: 4, fat: 0, sugar: 2, sodium: 670, serving: '1/2 cup (75g)', servingG: 75 },
+  { id: 'korean_fried_chicken', name: 'Korean Fried Chicken (치킨)', calories: 285, protein: 22, carbs: 12, fat: 17, sugar: 5, sodium: 750, serving: '4 pieces (200g)', servingG: 200 },
+  { id: 'japchae', name: 'Japchae (잡채)', calories: 144, protein: 4, carbs: 24, fat: 4, sugar: 6, sodium: 420, serving: '1 cup (200g)', servingG: 200 },
+  { id: 'kimbap', name: 'Kimbap (김밥)', calories: 160, protein: 5, carbs: 28, fat: 3, sugar: 4, sodium: 380, serving: '4 pieces (140g)', servingG: 140 },
+  { id: 'kimchi_jjigae', name: 'Kimchi Stew (김치찌개)', calories: 145, protein: 12, carbs: 9, fat: 7, sugar: 4, sodium: 950, serving: '1 bowl (450g)', servingG: 450 },
+  { id: 'galbi', name: 'Korean Short Ribs (갈비)', calories: 325, protein: 26, carbs: 8, fat: 21, sugar: 6, sodium: 680, serving: '1 serving (200g)', servingG: 200 },
+  { id: 'samgyeopsal', name: 'Pork Belly (삼겹살)', calories: 518, protein: 19, carbs: 0, fat: 48, sugar: 0, sodium: 62, serving: '1 serving (200g)', servingG: 200 },
+  { id: 'tteokbokki', name: 'Spicy Rice Cakes (떡볶이)', calories: 147, protein: 2, carbs: 32, fat: 1, sugar: 8, sodium: 620, serving: '1 serving (250g)', servingG: 250 },
+  { id: 'jjajangmyeon', name: 'Black Bean Noodles (짜장면)', calories: 540, protein: 16, carbs: 92, fat: 11, sugar: 12, sodium: 1200, serving: '1 bowl (700g)', servingG: 700 },
+  { id: 'jjamppong', name: 'Spicy Seafood Noodles (짬뽕)', calories: 520, protein: 28, carbs: 78, fat: 12, sugar: 6, sodium: 1450, serving: '1 bowl (700g)', servingG: 700 },
+  { id: 'samgyetang', name: 'Ginseng Chicken Soup (삼계탕)', calories: 380, protein: 42, carbs: 18, fat: 15, sugar: 2, sodium: 920, serving: '1 bowl (800g)', servingG: 800 },
   
   // Indian
   { id: 'curry_chicken', name: 'Chicken Curry', calories: 148, protein: 14, carbs: 6, fat: 8, sugar: 2, sodium: 480, serving: '1 cup (240g)', servingG: 240 },
@@ -317,10 +326,29 @@ export default function FoodSearchModal({
     setSearched(true);
     setActiveTab('search');
     
-    // 1. Search local database first (instant)
+    // Check if query contains Korean characters
+    const isKorean = hasKoreanCharacters(q);
+    let searchTerms = [q];
+    
+    // Translate Korean to English search terms
+    if (isKorean) {
+      const translation = translateKoreanFood(q);
+      if (translation.found && translation.searchTerms) {
+        console.log(`🇰🇷 Korean food detected: ${q}`);
+        console.log(`   Translated to: ${translation.english}`);
+        console.log(`   Search terms: ${translation.searchTerms.join(', ')}`);
+        searchTerms = [...translation.searchTerms, q]; // Include original too
+      } else {
+        console.log(`⚠️ Korean text detected but no translation available: ${q}`);
+      }
+    }
+    
+    // 1. Search local database first (instant) with all search terms
     const localMatches = COMMON_FOODS.filter(food => 
-      food.name.toLowerCase().includes(q) ||
-      food.id.includes(q.replace(/\s+/g, '_'))
+      searchTerms.some(term => 
+        food.name.toLowerCase().includes(term.toLowerCase()) ||
+        food.id.includes(term.replace(/\s+/g, '_'))
+      )
     );
     
     // If we have enough local results, use them
@@ -335,7 +363,9 @@ export default function FoodSearchModal({
       setResults(localMatches); // Show local results while searching
       
       try {
-        const usdaResults = await searchUSDAFoods(q, 10);
+        // Search USDA with all search terms (prioritize English translation)
+        const primaryTerm = searchTerms[0]; // English translation if Korean, otherwise original
+        const usdaResults = await searchUSDAFoods(primaryTerm, 10);
         
         // Convert and merge results (local first, then USDA)
         const convertedUSDA = usdaResults.map(convertUSDAResult);
