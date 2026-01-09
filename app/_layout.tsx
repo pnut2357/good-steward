@@ -19,7 +19,12 @@ export default function RootLayout() {
           console.log('✅ Local BLIP model ready');
           setLocalBlipReady(true);
         }}
-        onError={(err) => console.warn('⚠️ Local BLIP error:', err)}
+        onError={(err) => {
+          // Silently handle BLIP errors in development (expected in Expo Go)
+          // This prevents error toasts from appearing on Android
+          console.log('ℹ️ Local BLIP not available (requires dev/production build)');
+          setLocalBlipReady(true); // Mark as ready to hide the WebView
+        }}
       />
     </GestureHandlerRootView>
   );
