@@ -573,6 +573,14 @@ export default function ScannerScreen() {
           barcodeTypes: [...BARCODE_TYPES],
         } : undefined}
         onBarcodeScanned={mode === 'barcode' && !scanned ? handleBarCodeScanned : undefined}
+        onMountError={(error) => {
+          console.error('Camera mount error:', error);
+          Alert.alert(
+            'Camera Error',
+            'Failed to start camera. Please restart the app or check camera permissions.',
+            [{ text: 'OK' }]
+          );
+        }}
       />
 
       {/* Mode-specific overlay */}
