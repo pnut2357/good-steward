@@ -24,12 +24,14 @@ const PROVIDERS = {
     url: 'https://openrouter.ai/api/v1/chat/completions',
     keyEnv: 'EXPO_PUBLIC_OPENROUTER_API_KEY',
     type: 'chat' as const,
-    // Models to try in order (some may be temporarily unavailable)
+    // Models to try in order (free first, then cheap paid as fallback)
     models: [
-      'google/gemini-2.0-flash-exp:free',      // Fast, usually available
-      'google/gemma-3-27b-it:free',            // Backup Google model  
-      'meta-llama/llama-3.2-11b-vision-instruct:free', // Meta backup
-      'qwen/qwen2.5-vl-72b-instruct:free',     // Alibaba backup
+      'google/gemini-2.0-flash-exp:free',      // Free, fast, but often rate-limited
+      'google/gemma-3-27b-it:free',            // Free backup  
+      'meta-llama/llama-3.2-11b-vision-instruct:free', // Free Meta backup
+      'qwen/qwen2.5-vl-72b-instruct:free',     // Free Alibaba backup
+      'google/gemini-flash-1.5',               // Paid fallback ($0.00001/image) - VERY CHEAP
+      'anthropic/claude-3-haiku',              // Paid fallback ($0.0004/image) - reliable
     ],
   },
 };
